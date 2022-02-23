@@ -237,6 +237,9 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 	unsigned int	size;
 	unsigned int 	nlen;
 	unsigned int 	lbit = 0;
+	unsigned int 	obit = 0;
+	unsigned int	tlv_len = 0;
+	uint8_t		*tlvs = NULL;
 
 	/* This value determines whether we set (L)ength flag for
 		EVERY packet we send and add corresponding
@@ -256,6 +259,19 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 	*/
 	if (ssn->length_flag) {
 		lbit = 4;
+	}
+
+	/*
+	 *	This is included in the first fragment, and then never
+	 *	afterwards.
+	 */
+	if (ssn->outer_tlv_length) {
+		obit = 4;
+		ssn->outer_tlv_length = 0;
+
+		/*
+		 *	@todo - encode the outer tlvs
+		 */
 	}
 	if (ssn->fragment == 0) {
 		ssn->tls_msg_len = ssn->dirty_out.used;
@@ -278,7 +294,7 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 		ssn->fragment = 0;
 	}
 
-	reply.dlen = lbit + size;
+	reply.dlen = lbit + obit + size + tlv_len;
 	reply.length = TLS_HEADER_LEN + 1/*flags*/ + reply.dlen;
 
 	reply.data = talloc_array(eap_ds, uint8_t, reply.length);
@@ -289,7 +305,20 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 		memcpy(reply.data, &nlen, lbit);
 		reply.flags = SET_LENGTH_INCLUDED(reply.flags);
 	}
-	(ssn->record_minus)(&ssn->dirty_out, reply.data + lbit, size);
+	if (obit) {
+		nlen = htonl(tlv_len);
+		memcpy(reply.data + lbit, &nlen, obit);
+		reply.flags = SET_OUTER_TLV_INCLUDED(reply.flags);
+	}
+	(ssn->record_minus)(&ssn->dirty_out, reply.data + lbit + obit, size);
+
+	/*
+	 *	Tack on the outer TLVs after the TLS data.
+	 */
+	if (tlv_len) {
+		memcpy(reply.data + lbit + obit + size, tlvs, tlv_len);
+		talloc_free(tlvs);
+	}
 
 	eaptls_compose(eap_ds, &reply);
 	talloc_free(reply.data);
