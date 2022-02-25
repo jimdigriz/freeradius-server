@@ -457,6 +457,9 @@ static fr_tls_status_t eaptls_verify(eap_handler_t *handler)
 	 *	from a fragment acknowledgement.
 	 */
 	if (TLS_LENGTH_INCLUDED(eaptls_packet->flags)) {
+		/*
+		 *	data[0] and data[1] are always zero, vi eap_vp2packet()
+		 */
 		size_t total_len = eaptls_packet->data[2] * 256 | eaptls_packet->data[3];
 
 		if (frag_len > total_len) {
@@ -495,6 +498,14 @@ static fr_tls_status_t eaptls_verify(eap_handler_t *handler)
 				return FR_TLS_FIRST_FRAGMENT;
 			}
 
+			/*
+			 *	The "O" bit is only allowed for the first fragment.
+			 */
+			if (TLS_OUTER_TLV_INCLUDED(eaptls_packet->flags)) {
+				REDEBUG("(TLS) EAP Peer set 'O' bit after initial fragment");
+				return FR_TLS_INVALID;
+			}
+
 			RDEBUG2("(TLS) EAP Got additional fragment with length (%zu bytes).  "
 				"Peer says more fragments will follow", frag_len);
 
@@ -524,6 +535,10 @@ static fr_tls_status_t eaptls_verify(eap_handler_t *handler)
 		RDEBUG2("(TLS) EAP Got all data (%zu bytes)", frag_len);
 		return FR_TLS_LENGTH_INCLUDED;
 	}
+
+	/*
+	 *	eap_vp2packet() ensures that the 'O' bit is not set here.
+	 */
 
 	/*
 	 *	The previous packet had the M flags set, but this one doesn't,
@@ -631,18 +646,6 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 	tlspacket->flags = eap_ds->response->type.data[0];
 
 	/*
-	 *	A quick sanity check of the flags.  If we've been told
-	 *	that there's a length, and there isn't one, then stop.
-	 */
-	if (TLS_LENGTH_INCLUDED(tlspacket->flags) &&
-	    (tlspacket->length < 5)) { /* flags + TLS message length */
-		REDEBUG("(TLS) EAP Invalid packet received: Length bit is set,"
-			"but packet too short to contain length field");
-		talloc_free(tlspacket);
-		return NULL;
-	}
-
-	/*
 	 *	If the final TLS packet is larger than we can handle, die
 	 *	now.
 	 *
@@ -674,12 +677,6 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 	case FR_TLS_FIRST_FRAGMENT:
 	case FR_TLS_LENGTH_INCLUDED:
 	case FR_TLS_MORE_FRAGMENTS_WITH_LENGTH:
-		if (tlspacket->length < 5) { /* flags + TLS message length */
-			REDEBUG("(TLS) EAP Invalid packet received: Expected length, got none");
-			talloc_free(tlspacket);
-			return NULL;
-		}
-
 		/*
 		 *	Extract all the TLS fragments from the
 		 *	previous eap_ds Start appending this
