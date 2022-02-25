@@ -315,7 +315,7 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 	/*
 	 *	Sanity check the length before doing anything.
 	 */
-	if (first->vp_length < 4) {
+	if (first->vp_length < 5) {
 		fr_strerror_printf("EAP packet is too short");
 		return NULL;
 	}
@@ -330,8 +330,8 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 	/*
 	 *	Take out even more weird things.
 	 */
-	if (len < 4) {
-		fr_strerror_printf("EAP packet has invalid length (less than 4 bytes)");
+	if (len < 5) {
+		fr_strerror_printf("EAP packet has invalid length (less than 5 bytes)");
 		return NULL;
 	}
 
@@ -377,6 +377,115 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 	while ((i = fr_cursor_next_by_num(&cursor, PW_EAP_MESSAGE, 0, TAG_ANY))) {
 		memcpy(ptr, i->vp_strvalue, i->vp_length);
 		ptr += i->vp_length;
+	}
+
+	/*
+	 *	Do additional sanity check for TLS-based EAP types, so
+	 *	that we don't have to do any of that later.
+	 */
+	switch (eap_packet->data[0]) {
+	/*
+	 *    0                   1                   2                   3
+	 *    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	 *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 *   |     Code      |   Identifier  |            Length             |
+	 *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 *   |     Type      |   Flags | Ver |        Message Length         :
+	 *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 *   :         Message Length        |
+	 *
+	 *	Flags are:
+	 *
+	 *       7 6 5 4 3 2 1 0
+	 *      +-+-+-+-+-+-+-+-+
+	 *      |L M S O R R R R|
+	 *      +-+-+-+-+-+-+-+-+
+	 *
+	 *      L = Length included
+	 *      M = More fragments
+	 *      S = EAP-TLS start
+	 *	O = outer TLV length included (4 octets, only for TEAP)
+	 *      R = Reserved
+	 */
+	case PW_EAP_TLS:
+	case PW_EAP_TTLS:
+	case PW_EAP_PEAP:
+	case PW_EAP_FAST:
+		if (len < 2) {
+			fr_strerror_printf("Malformed EAP packet - packet is too small to contain TLS flags");
+			talloc_free(eap_packet);
+			return NULL;
+		}
+
+		/*
+		 *	L bit set means we have 4 octets of Length
+		 *	following the flags field.
+		 */
+		if ((eap_packet->data[1] & 0x80) != 0) {
+			uint32_t tls_len;
+
+			if (len <= (2 + 4)) {
+				fr_strerror_printf("Malformed EAP packet - TLS 'L' bit is set, but packet is too small to contain 'length' field");
+				talloc_free(eap_packet);
+				return NULL;
+			}
+
+			/*
+			 *	This is arguably wrong... a single TLS
+			 *	record is max 16K in length.  But a
+			 *	TLS message may span multiple TLS
+			 *	records.
+			 */
+			memcpy(&tls_len, eap_packet->data + 2, 4);
+			tls_len = ntohl(tls_len);
+			if (tls_len > MAX_RECORD_SIZE) {
+				fr_strerror_printf("Malformed EAP packet - TLS reassembled data length %u (%08x) (will be greater than the TLS maximum record size of 16384 bytes", tls_len, tls_len);
+				talloc_free(eap_packet);
+				return NULL;
+			}
+
+			/*
+			 *	O bit set means we have 4 octets of Outer TLV Length
+			 *	following the Length field.
+			 */
+			if ((eap_packet->data[1] & 0x10) != 0) {
+				uint32_t tlv_len;
+
+				if (len <= (2 + 4 + 4)) {
+					fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but packet is too small to contain 'outer tlv length' field");
+					talloc_free(eap_packet);
+					return NULL;
+				}
+
+				memcpy(&tlv_len, eap_packet->data + 2 + 4, 4);
+				tlv_len = ntohl(tlv_len);
+
+				/*
+				 *	The EAP header includes all of
+				 *	the data in the packet.  The
+				 *	outer TLV length cannot
+				 *	include the EAP header, type,
+				 *	flags, length field, or outer
+				 *	tlv length field.
+				 */
+				if (tlv_len > (len - (2 + 4 + 4))) {
+					fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but 'outer tlv length' field is larger than the current fragment");
+					talloc_free(eap_packet);
+					return NULL;
+				}
+			}
+		} else {
+			if ((eap_packet->data[1] & 0x10) != 0) {
+				fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but 'L' bit is not set.");
+				talloc_free(eap_packet);
+				return NULL;
+			}
+
+		}
+		break;
+
+	default:
+		break;
 	}
 
 	return eap_packet;
