@@ -235,7 +235,6 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 {
 	EAPTLS_PACKET	reply;
 	unsigned int	size;
-	unsigned int 	nlen;
 	unsigned int 	lbit = 0;
 	unsigned int 	obit = 0;
 	unsigned int	tlv_len = 0;
@@ -295,21 +294,25 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 	}
 
 	reply.dlen = lbit + obit + size + tlv_len;
-	reply.length = TLS_HEADER_LEN + 1/*flags*/ + reply.dlen;
+	reply.length = TLS_HEADER_LEN + 1 /*flags*/ + reply.dlen;
 
 	reply.data = talloc_array(eap_ds, uint8_t, reply.length);
 	if (!reply.data) return 0;
 
 	if (lbit) {
+		uint32_t 	nlen;
+
 		nlen = htonl(ssn->tls_msg_len);
 		memcpy(reply.data, &nlen, lbit);
 		reply.flags = SET_LENGTH_INCLUDED(reply.flags);
+
+		if (obit) {
+			nlen = htonl(tlv_len);
+			memcpy(reply.data + lbit, &nlen, obit);
+			reply.flags = SET_OUTER_TLV_INCLUDED(reply.flags);
+		}
 	}
-	if (obit) {
-		nlen = htonl(tlv_len);
-		memcpy(reply.data + lbit, &nlen, obit);
-		reply.flags = SET_OUTER_TLV_INCLUDED(reply.flags);
-	}
+
 	(ssn->record_minus)(&ssn->dirty_out, reply.data + lbit + obit, size);
 
 	/*
