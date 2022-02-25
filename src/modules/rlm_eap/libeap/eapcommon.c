@@ -302,6 +302,7 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 	uint16_t len;
 	int total_len;
 	vp_cursor_t cursor;
+	bool allow_o = false;
 
 	/*
 	 *	Get only EAP-Message attribute list
@@ -407,6 +408,10 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 	 *	O = outer TLV length included (4 octets, only for TEAP)
 	 *      R = Reserved
 	 */
+	case PW_EAP_TEAP:
+		allow_o = true;
+		/* FALL-THROUGH */
+
 	case PW_EAP_TLS:
 	case PW_EAP_TTLS:
 	case PW_EAP_PEAP:
@@ -450,6 +455,12 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 			 */
 			if ((eap_packet->data[1] & 0x10) != 0) {
 				uint32_t tlv_len;
+
+				if (!allow_o) {
+					fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but EAP method does not use it.");
+					talloc_free(eap_packet);
+					return NULL;
+				}
 
 				if (len <= (2 + 4 + 4)) {
 					fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but packet is too small to contain 'outer tlv length' field");
