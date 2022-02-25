@@ -610,7 +610,7 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 {
 	EAPTLS_PACKET	*tlspacket;
 	uint32_t	data_len = 0;
-	uint32_t	len = 0;
+	uint32_t	obit = 0;
 	uint8_t		*data = NULL;
 
 	if (status == FR_TLS_INVALID) return NULL;
@@ -646,24 +646,8 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 	tlspacket->flags = eap_ds->response->type.data[0];
 
 	/*
-	 *	If the final TLS packet is larger than we can handle, die
-	 *	now.
-	 *
-	 *	Likewise, if the EAP packet says N bytes, and the TLS
-	 *	packet says there's fewer bytes, it's a problem.
+	 *	eaptls_verify() ensures that all of the flags are correct.
 	 */
-	if (TLS_LENGTH_INCLUDED(tlspacket->flags)) {
-		memcpy(&data_len, &eap_ds->response->type.data[1], 4);
-		data_len = ntohl(data_len);
-		if (data_len > MAX_RECORD_SIZE) {
-			REDEBUG("(TLS) EAP Reassembled data will be %u bytes, "
-				"greater than the size that we can handle (" STRINGIFY(MAX_RECORD_SIZE) " bytes)",
-				data_len);
-			talloc_free(tlspacket);
-			return NULL;
-		}
-	}
-
 	switch (status) {
 	/*
 	 *	The TLS Message Length field is four octets, and
@@ -675,24 +659,19 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 	 *	length should solve the problem.
 	 */
 	case FR_TLS_FIRST_FRAGMENT:
-	case FR_TLS_LENGTH_INCLUDED:
-	case FR_TLS_MORE_FRAGMENTS_WITH_LENGTH:
-		/*
-		 *	Extract all the TLS fragments from the
-		 *	previous eap_ds Start appending this
-		 *	fragment to the above ds
-		 */
-		memcpy(&data_len, &eap_ds->response->type.data[1], sizeof(uint32_t));
-		data_len = ntohl(data_len);
-		data = (eap_ds->response->type.data + 5/*flags+TLS-Length*/);
-		len = eap_ds->response->type.length - 5/*flags+TLS-Length*/;
+		obit = TLS_OUTER_TLV_INCLUDED(tlspacket->flags) << 2;
 
 		/*
-		 *	Hmm... this should be an error, too.
+		 *	@todo - decode outer TLVs, too
 		 */
-		if (data_len > len) {
-			data_len = len;
-		}
+
+		/* FALL-THROUGH */
+
+	case FR_TLS_LENGTH_INCLUDED:
+	case FR_TLS_MORE_FRAGMENTS_WITH_LENGTH:
+		memcpy(&data_len, &eap_ds->response->type.data[1], 4);
+		data_len = ntohl(data_len);
+		data = eap_ds->response->type.data + 5 + obit;
 		break;
 
 		/*
@@ -700,8 +679,8 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 		 */
 	case FR_TLS_MORE_FRAGMENTS:
 	case FR_TLS_OK:
-		data_len = eap_ds->response->type.length - 1/*flags*/;
-		data = eap_ds->response->type.data + 1/*flags*/;
+		data_len = eap_ds->response->type.length - 1;
+		data = eap_ds->response->type.data + 1;
 		break;
 
 	default:
@@ -718,6 +697,7 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 			talloc_free(tlspacket);
 			return NULL;
 		}
+
 		memcpy(tlspacket->data, data, data_len);
 	}
 
