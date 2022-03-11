@@ -28,7 +28,48 @@ USES_APPLE_DEPRECATED_API	/* OpenSSL API has been deprecated by Apple */
 
 static int setup_fake_request(REQUEST *request, REQUEST *fake, peap_tunnel_t *t);
 
-static int eappeap_result(eap_handler_t *handler, tls_session_t *tls_session, uint16_t result)
+/* MS-PEAP, Section 2.2.8.1.1 */
+#define EAPTLS_MPPE_KEY_LEN 32
+static void eappeap_cryptobinding(eap_handler_t *handler, tls_session_t *tls_session, uint8_t *data)
+{
+	REQUEST *request = handler->request;
+	uint8_t tms[4 * EAPTLS_MPPE_KEY_LEN];
+	uint8_t const *context = NULL;
+	size_t context_size = 0;
+#ifdef TLS1_3_VERSION
+	uint8_t const context_tls13[] = { handler->type };
+#endif
+	uint8_t input[61] = {0};
+
+	RDEBUG2("Sending Cryptobinding");
+
+	/* MS-PEAP, Section 3.1.5.5 */
+	data[0] = 0x00; /* flags - optional (ie. non-mandatory) */
+	data[1] = EAP_TLV_CRYPTO_BINDING;
+	data[2] = 0;	/* length of the data portion (high) */
+	data[3] = 56;	/* length of the data portion (low)  */
+	data[4] = 0;	/* reserved */
+	data[5] = 0;	/* version - FIXME support v1 and v2 */
+	data[6] = tls_session->peap_flag;						/* recv-version */
+	data[7] = EAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST;				/* sub-type */
+	for (int i = 0; i < 32; i += 4) *((uint32_t *)&data[8 + i]) = fr_rand();	/* nonce */
+
+#ifdef TLS1_3_VERSION
+	if (tls_session->info.version) {
+		context = context_tls13;
+		context_size = sizeof(context_tls13);
+		tls_session->label = "EXPORTER_EAP_TLS_Key_Material";	/* FIXME: is doing this here safe? */
+	}
+#endif
+	eaptls_gen_mppe_keys_only(request, tls_session->ssl, tls_session->label, context, context_size, tms);
+
+	input[0] = handler->type;
+	memcpy(&input[1], data, 60);
+
+	fr_hmac_sha1(&data[40], input, sizeof(input), tms, 20);
+}
+
+static void eappeap_result(eap_handler_t *handler, tls_session_t *tls_session, uint16_t result, bool cryptobinding)
 {
 	REQUEST *request = handler->request;
 	eap_packet_t *eap_packet = talloc_zero(request, eap_packet_t);
@@ -38,7 +79,7 @@ static int eappeap_result(eap_handler_t *handler, tls_session_t *tls_session, ui
 	eap_packet->code = PW_EAP_REQUEST;
 	eap_packet->id = handler->eap_ds->response->id + 1;
 	eap_packet->type.num = PW_EAP_TLV;
-	eap_packet->type.length = 4 + 2;
+	eap_packet->type.length = 4 + 2 + (cryptobinding ? 4 + 56 : 0);
 	eap_packet->type.data = talloc_array(eap_packet, uint8_t, eap_packet->type.length);
 
 	data = eap_packet->type.data;
@@ -49,18 +90,15 @@ static int eappeap_result(eap_handler_t *handler, tls_session_t *tls_session, ui
 	data[4] = nresult & 0xff;
 	data[5] = (nresult >> 8) & 0xff;
 
+	if (cryptobinding) eappeap_cryptobinding(handler, tls_session, &data[6]);
+
 	eap_wireformat(eap_packet);
 
 	(tls_session->record_plus)(&tls_session->clean_in, eap_packet->packet, eap_packet->length);
 
 	talloc_free(eap_packet);
 
-	/*
-	 *	FIXME: Check the return code.
-	 */
 	tls_handshake_send(request, tls_session);
-
-	return 1;
 }
 
 /*
@@ -68,13 +106,13 @@ static int eappeap_result(eap_handler_t *handler, tls_session_t *tls_session, ui
  *
  *	Result-TLV = Failure
  */
-static int eappeap_failure(eap_handler_t *handler, tls_session_t *tls_session)
+static void eappeap_failure(eap_handler_t *handler, tls_session_t *tls_session)
 {
 	REQUEST *request = handler->request;
 
 	RDEBUG2("FAILURE");
 
-	return eappeap_result(handler, tls_session, EAP_TLV_FAILURE);
+	eappeap_result(handler, tls_session, EAP_TLV_FAILURE, false);
 }
 
 /*
@@ -82,16 +120,16 @@ static int eappeap_failure(eap_handler_t *handler, tls_session_t *tls_session)
  *
  *	Result-TLV = Success
  */
-static int eappeap_success(eap_handler_t *handler, tls_session_t *tls_session)
+static void eappeap_success(eap_handler_t *handler, tls_session_t *tls_session)
 {
 	REQUEST *request = handler->request;
 
 	RDEBUG2("SUCCESS");
 
-	return eappeap_result(handler, tls_session, EAP_TLV_SUCCESS);
+	eappeap_result(handler, tls_session, EAP_TLV_SUCCESS, true);
 }
 
-static int eappeap_identity(eap_handler_t *handler, tls_session_t *tls_session)
+static void eappeap_identity(eap_handler_t *handler, tls_session_t *tls_session)
 {
 	REQUEST *request = handler->request;
 	eap_packet_t *eap_packet = talloc_zero(request, eap_packet_t);
@@ -106,14 +144,7 @@ static int eappeap_identity(eap_handler_t *handler, tls_session_t *tls_session)
 
 	talloc_free(eap_packet);
 
-	/*
-	 *	FIXME: Check the return code.
-	 */
-	tls_handshake_send(handler->request, tls_session);
-
-	(tls_session->record_init)(&tls_session->clean_in);
-
-	return 1;
+	tls_handshake_send(request, tls_session);
 }
 
 /*

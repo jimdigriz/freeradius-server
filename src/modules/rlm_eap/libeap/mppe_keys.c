@@ -210,15 +210,11 @@ void T_PRF(unsigned char const *secret, unsigned int secret_len,
 #define EAPTLS_MPPE_KEY_LEN     32
 
 /*
- *	Generate keys according to RFC 2716 and add to reply
+ *	Generate keys according to RFC 5216 (section 2.3)
  */
-void eaptls_gen_mppe_keys(REQUEST *request, SSL *s, char const *label, uint8_t const *context, UNUSED size_t context_size)
+void eaptls_gen_mppe_keys_only(REQUEST *request, SSL *s, char const *label, uint8_t const *context, UNUSED size_t context_size, uint8_t *out)
 {
-	uint8_t out[4 * EAPTLS_MPPE_KEY_LEN];
-	uint8_t *p;
-	size_t len;
-
-	len = strlen(label);
+	size_t len = strlen(label);
 
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L
 	if (SSL_export_keying_material(s, out, sizeof(out), label, len, context, context_size, context != NULL) != 1) {
@@ -227,6 +223,7 @@ void eaptls_gen_mppe_keys(REQUEST *request, SSL *s, char const *label, uint8_t c
 	}
 #else
 	{
+		uint8_t *p;
 		uint8_t seed[64 + (2 * SSL3_RANDOM_SIZE) + (context ? 2 + context_size : 0)];
 		uint8_t buf[4 * EAPTLS_MPPE_KEY_LEN];
 
@@ -258,6 +255,17 @@ void eaptls_gen_mppe_keys(REQUEST *request, SSL *s, char const *label, uint8_t c
 		    seed, len, out, buf, sizeof(out));
 	}
 #endif
+}
+
+/*
+ *	Generate keys according to RFC 5216 (section 2.3) and add to reply
+ */
+void eaptls_gen_mppe_keys(REQUEST *request, SSL *s, char const *label, uint8_t const *context, UNUSED size_t context_size)
+{
+	uint8_t out[4 * EAPTLS_MPPE_KEY_LEN];
+	uint8_t *p;
+
+	eaptls_gen_mppe_keys_only(request, s, label, context, context_size, out);
 
 	p = out;
 	eap_add_reply(request, "MS-MPPE-Recv-Key", p, EAPTLS_MPPE_KEY_LEN);
@@ -267,7 +275,6 @@ void eaptls_gen_mppe_keys(REQUEST *request, SSL *s, char const *label, uint8_t c
 	eap_add_reply(request, "EAP-MSK", out, 64);
 	eap_add_reply(request, "EAP-EMSK", out + 64, 64);
 }
-
 
 #define FR_TLS_PRF_CHALLENGE		"ttls challenge"
 

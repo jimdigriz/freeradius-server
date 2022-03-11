@@ -62,13 +62,29 @@ typedef struct peap_tunnel_t {
 	peap_resumption	session_resumption_state;
 } peap_tunnel_t;
 
+/* MS-PEAP, Section 2.2.8.1.1 - Crypto-Binding TLV (cloned from eap_fast.h) */
+typedef struct eap_tlv_crypto_binding_tlv_t {
+	uint16_t tlv_type;
+	uint16_t length;
+	uint8_t reserved;
+	uint8_t version;
+	uint8_t received_version;
+	uint8_t subtype;
+	uint8_t nonce[32];
+	uint8_t compound_mac[20];
+} CC_HINT(__packed__) eap_tlv_crypto_binding_tlv_t;
+
+#define PW_EAP_TLV 33
+
 #define EAP_TLV_FLAG_MANDATORY (0x80)
 
 #define EAP_TLV_SUCCESS (1)
 #define EAP_TLV_FAILURE (2)
 #define EAP_TLV_ACK_RESULT (3)
+#define EAP_TLV_CRYPTO_BINDING (12)
 
-#define PW_EAP_TLV 33
+#define EAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST (0)
+#define EAP_TLV_CRYPTO_BINDING_SUBTYPE_RESPONSE (1)
 
 /*
  *	Process the PEAP portion of an EAP-PEAP request.
