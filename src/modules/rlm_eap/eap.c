@@ -570,7 +570,7 @@ rlm_rcode_t eap_compose(eap_handler_t *handler)
 	vp = radius_pair_create(request->reply, &request->reply->vps, PW_EAP_MESSAGE, 0);
 	if (!vp) return RLM_MODULE_INVALID;
 
-	vp->vp_length = eap_packet->length[0] * 256 + eap_packet->length[1];
+	vp->vp_length = reply->length;
 	vp->vp_octets = talloc_steal(vp, reply->packet);
 	reply->packet = NULL;
 
@@ -626,9 +626,9 @@ rlm_rcode_t eap_compose(eap_handler_t *handler)
 		break;
 	}
 
-	RDEBUG2("Sending EAP %s (code %i) ID %d length %i",
+	RDEBUG2("Sending EAP %s (code %i) ID %d length %zu",
 		eap_codes[eap_packet->code], eap_packet->code, reply->id,
-		eap_packet->length[0] * 256 + eap_packet->length[1]);
+		reply->length);
 
 	return rcode;
 }

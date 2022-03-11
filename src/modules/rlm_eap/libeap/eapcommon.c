@@ -122,13 +122,14 @@ char const *eap_type2name(eap_type_t method)
  *		      reply->type   - setup with data
  *
  * OUTPUT reply->packet is setup with wire format, and will
- *		      be allocated to the right size.
+ *		      be allocated to the right size which
+ *		      will be stored in reply->length.
  *
  */
 int eap_wireformat(eap_packet_t *reply)
 {
-	eap_packet_raw_t	*header;
-	uint16_t total_length = 0;
+	eap_packet_raw_t *header;
+	uint16_t length;
 
 	if (!reply) return EAP_INVALID;
 
@@ -138,15 +139,15 @@ int eap_wireformat(eap_packet_t *reply)
 	 */
 	if(reply->packet != NULL) return EAP_VALID;
 
-	total_length = EAP_HEADER_LEN;
+	reply->length = EAP_HEADER_LEN;
 	if (reply->code < 3) {
-		total_length += 1/* EAP Method */;
+		reply->length += 1/* EAP Method */;
 		if (reply->type.data && reply->type.length > 0) {
-			total_length += reply->type.length;
+			reply->length += reply->type.length;
 		}
 	}
 
-	reply->packet = talloc_array(reply, uint8_t, total_length);
+	reply->packet = talloc_array(reply, uint8_t, reply->length);
 	header = (eap_packet_raw_t *)reply->packet;
 	if (!header) {
 		return EAP_INVALID;
@@ -155,8 +156,8 @@ int eap_wireformat(eap_packet_t *reply)
 	header->code = (reply->code & 0xFF);
 	header->id = (reply->id & 0xFF);
 
-	total_length = htons(total_length);
-	memcpy(header->length, &total_length, sizeof(total_length));
+	length = htons(reply->length);
+	memcpy(header->length, &length, sizeof(length));
 
 	/*
 	 *	Request and Response packets are special.

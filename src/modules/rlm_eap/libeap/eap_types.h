@@ -132,9 +132,9 @@ typedef struct eap_type_data {
 typedef struct eap_packet {
 	eap_code_t	code;
 	uint8_t		id;
-	size_t		length;
 	eap_type_data_t	type;
 
+	size_t		length;
 	uint8_t		*packet;
 } eap_packet_t;
 
