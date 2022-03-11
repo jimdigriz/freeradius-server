@@ -62,6 +62,7 @@ typedef struct peap_tunnel_t {
 	peap_resumption	session_resumption_state;
 } peap_tunnel_t;
 
+#define EAP_TLV_FLAG_MANDATORY (0x80)
 
 #define EAP_TLV_SUCCESS (1)
 #define EAP_TLV_FAILURE (2)

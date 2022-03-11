@@ -28,90 +28,89 @@ USES_APPLE_DEPRECATED_API	/* OpenSSL API has been deprecated by Apple */
 
 static int setup_fake_request(REQUEST *request, REQUEST *fake, peap_tunnel_t *t);
 
+static int eappeap_result(eap_handler_t *handler, tls_session_t *tls_session, uint16_t result)
+{
+	REQUEST *request = handler->request;
+	eap_packet_t *eap_packet = talloc_zero(request, eap_packet_t);
+	uint8_t *data;
+	uint16_t nresult = htons(result);
+
+	eap_packet->code = PW_EAP_REQUEST;
+	eap_packet->id = handler->eap_ds->response->id + 1;
+	eap_packet->type.num = PW_EAP_TLV;
+	eap_packet->type.length = 4 + 2;
+	eap_packet->type.data = talloc_array(eap_packet, uint8_t, eap_packet->type.length);
+
+	data = eap_packet->type.data;
+	data[0] = EAP_TLV_FLAG_MANDATORY;
+	data[1] = EAP_TLV_ACK_RESULT;
+	data[2] = 0;	/* length of the data portion (high) */
+	data[3] = 2;	/* length of the data portion (low)  */
+	data[4] = nresult & 0xff;
+	data[5] = (nresult >> 8) & 0xff;
+
+	eap_wireformat(eap_packet);
+
+	(tls_session->record_plus)(&tls_session->clean_in, eap_packet->packet, eap_packet->length);
+
+	talloc_free(eap_packet);
+
+	/*
+	 *	FIXME: Check the return code.
+	 */
+	tls_handshake_send(request, tls_session);
+
+	return 1;
+}
+
 /*
  *	Send protected EAP-Failure
  *
- *       Result-TLV = Failure
+ *	Result-TLV = Failure
  */
 static int eappeap_failure(eap_handler_t *handler, tls_session_t *tls_session)
 {
-	uint8_t tlv_packet[11];
 	REQUEST *request = handler->request;
 
 	RDEBUG2("FAILURE");
 
-	tlv_packet[0] = PW_EAP_REQUEST;
-	tlv_packet[1] = handler->eap_ds->response->id +1;
-	tlv_packet[2] = 0;
-	tlv_packet[3] = 11;	/* length of this packet */
-	tlv_packet[4] = PW_EAP_TLV;
-	tlv_packet[5] = 0x80;
-	tlv_packet[6] = EAP_TLV_ACK_RESULT;
-	tlv_packet[7] = 0;
-	tlv_packet[8] = 2;	/* length of the data portion */
-	tlv_packet[9] = 0;
-	tlv_packet[10] = EAP_TLV_FAILURE;
-
-	(tls_session->record_plus)(&tls_session->clean_in, tlv_packet, 11);
-
-	/*
-	 *	FIXME: Check the return code.
-	 */
-	tls_handshake_send(request, tls_session);
-
-	return 1;
+	return eappeap_result(handler, tls_session, EAP_TLV_FAILURE);
 }
-
 
 /*
  *	Send protected EAP-Success
  *
- *       Result-TLV = Success
+ *	Result-TLV = Success
  */
 static int eappeap_success(eap_handler_t *handler, tls_session_t *tls_session)
 {
-	uint8_t tlv_packet[11];
 	REQUEST *request = handler->request;
 
 	RDEBUG2("SUCCESS");
 
-	tlv_packet[0] = PW_EAP_REQUEST;
-	tlv_packet[1] = handler->eap_ds->response->id +1;
-	tlv_packet[2] = 0;
-	tlv_packet[3] = 11;	/* length of this packet */
-	tlv_packet[4] = PW_EAP_TLV;
-	tlv_packet[5] = 0x80;	/* mandatory AVP */
-	tlv_packet[6] = EAP_TLV_ACK_RESULT;
-	tlv_packet[7] = 0;
-	tlv_packet[8] = 2;	/* length of the data portion */
-	tlv_packet[9] = 0;
-	tlv_packet[10] = EAP_TLV_SUCCESS;
+	return eappeap_result(handler, tls_session, EAP_TLV_SUCCESS);
+}
 
-	(tls_session->record_plus)(&tls_session->clean_in, tlv_packet, 11);
+static int eappeap_identity(eap_handler_t *handler, tls_session_t *tls_session)
+{
+	REQUEST *request = handler->request;
+	eap_packet_t *eap_packet = talloc_zero(request, eap_packet_t);
+
+	eap_packet->code = PW_EAP_REQUEST;
+	eap_packet->id = handler->eap_ds->response->id + 1;
+	eap_packet->type.num = PW_EAP_IDENTITY;
+
+	eap_wireformat(eap_packet);
+
+	(tls_session->record_plus)(&tls_session->clean_in, eap_packet->packet, eap_packet->length);
+
+	talloc_free(eap_packet);
 
 	/*
 	 *	FIXME: Check the return code.
 	 */
-	tls_handshake_send(request, tls_session);
-
-	return 1;
-}
-
-
-static int eappeap_identity(eap_handler_t *handler, tls_session_t *tls_session)
-{
-	eap_packet_raw_t eap_packet;
-
-	eap_packet.code = PW_EAP_REQUEST;
-	eap_packet.id = handler->eap_ds->response->id + 1;
-	eap_packet.length[0] = 0;
-	eap_packet.length[1] = EAP_HEADER_LEN + 1;
-	eap_packet.data[0] = PW_EAP_IDENTITY;
-
-	(tls_session->record_plus)(&tls_session->clean_in,
-				  &eap_packet, sizeof(eap_packet));
-
 	tls_handshake_send(handler->request, tls_session);
+
 	(tls_session->record_init)(&tls_session->clean_in);
 
 	return 1;
