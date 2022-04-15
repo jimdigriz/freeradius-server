@@ -289,7 +289,8 @@ static int mod_process(void *arg, eap_handler_t *handler)
 			ret = eaptls_success(handler, 0);
 			goto done;
 		} else {
-			eaptls_request(handler->eap_ds, tls_session);
+			goto phase2;
+//			eaptls_request(handler->eap_ds, tls_session);
 		}
 		ret = 1;
 		goto done;
@@ -318,6 +319,7 @@ static int mod_process(void *arg, eap_handler_t *handler)
 		goto done;
 	}
 
+phase2:
 	/*
 	 *	Session is established, proceed with decoding
 	 *	tunneled data.

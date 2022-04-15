@@ -1177,6 +1177,25 @@ static PW_CODE eap_teap_process_tlvs(REQUEST *request, eap_handler_t *eap_sessio
 }
 
 
+static void print_tunneled_data(uint8_t const *data, size_t data_len)
+{
+	size_t i;
+
+	DEBUG2("  TEAP tunnel data total %zu", data_len);
+
+	if ((rad_debug_lvl > 2) && fr_log_fp) {
+		for (i = 0; i < data_len; i++) {
+		  if ((i & 0x0f) == 0) fprintf(fr_log_fp, "  TEAP tunnel data in %02x: ", (int) i);
+
+			fprintf(fr_log_fp, "%02x ", data[i]);
+
+			if ((i & 0x0f) == 0x0f) fprintf(fr_log_fp, "\n");
+		}
+		if ((data_len & 0x0f) != 0) fprintf(fr_log_fp, "\n");
+	}
+}
+
+
 /*
  * Process the inner tunnel data
  */
@@ -1198,6 +1217,8 @@ PW_CODE eap_teap_process(eap_handler_t *eap_session, tls_session_t *tls_session)
 	data = tls_session->clean_out.data;
 
 	t = (teap_tunnel_t *) tls_session->opaque;
+
+	if (rad_debug_lvl > 2) print_tunneled_data(data, data_len);
 
 	/*
 	 * See if the tunneled data is well formed.
