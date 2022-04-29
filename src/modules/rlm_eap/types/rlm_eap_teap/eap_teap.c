@@ -1257,6 +1257,9 @@ PW_CODE eap_teap_process(eap_handler_t *eap_session, tls_session_t *tls_session)
 		eap_teap_send_identity_request(request, tls_session, eap_session);
 
 		t->stage = AUTHENTICATION;
+
+		tls_handshake_send(request, tls_session);
+
 		return PW_CODE_ACCESS_CHALLENGE;
 	}
 
@@ -1334,6 +1337,8 @@ PW_CODE eap_teap_process(eap_handler_t *eap_session, tls_session_t *tls_session)
 		RERROR("Internal sanity check failed in EAP-TEAP at %d", t->stage);
 		code = PW_CODE_ACCESS_REJECT;
 	}
+
+	tls_handshake_send(request, tls_session);
 
 	return code;
 }
