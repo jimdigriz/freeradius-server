@@ -130,6 +130,7 @@ static teap_tunnel_t *teap_alloc(TALLOC_CTX *ctx, rlm_eap_teap_t *inst)
 
 	t = talloc_zero(ctx, teap_tunnel_t);
 
+	t->received_version = -1;
 	t->default_method = inst->default_method;
 	t->copy_request_to_tunnel = inst->copy_request_to_tunnel;
 	t->use_tunneled_reply = inst->use_tunneled_reply;
@@ -186,7 +187,7 @@ static int mod_session_init(void *type_arg, eap_handler_t *handler)
 	 *	will over-ride this label with the correct label for
 	 *	TLS 1.3.
 	 */
-	ssn->label = "teap keying material";
+	ssn->label = "EXPORTER: teap session key seed";
 
 	/*
 	 *	Really just protocol version.
@@ -332,6 +333,8 @@ phase2:
 	 */
 	if (!tls_session->opaque) {
 		tls_session->opaque = teap_alloc(tls_session, inst);
+		t = (teap_tunnel_t *) tls_session->opaque;
+		if (t->received_version < 0) t->received_version = handler->eap_ds->response->type.data[0] & 0x07;
 	}
 
 	/*

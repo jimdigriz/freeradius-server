@@ -29,8 +29,9 @@ RCSIDH(eap_teap_h, "$Id$")
 
 #define EAP_TEAP_VERSION			1
 
-#define EAP_TEAP_KEY_LEN			64
-#define EAP_EMSK_LEN				64
+#define EAP_TEAP_MSK_LEN			64
+#define EAP_TEAP_EMSK_LEN			64
+#define EAP_TEAP_IMSK_LEN			32
 #define EAP_TEAP_SKS_LEN			40
 #define EAP_TEAP_SIMCK_LEN			40
 #define EAP_TEAP_CMK_LEN			20
@@ -169,12 +170,10 @@ typedef struct eap_teap_pac_attr_pac_type_t {
 
 /* RFC 7170, Section 4.2.13 - Crypto-Binding TLV */
 typedef struct eap_tlv_crypto_binding_tlv_t {
-        uint16_t tlv_type;
-        uint16_t length;
         uint8_t reserved;
         uint8_t version;
         uint8_t received_version;
-        uint8_t subtype;
+        uint8_t subtype;	/* Flags[4b] and Sub-Type[4b] */
         uint8_t nonce[32];
         uint8_t emsk_compound_mac[20];
         uint8_t msk_compound_mac[20];
@@ -205,18 +204,16 @@ typedef enum eap_teap_tlv_type_t {
 	EAP_TEAP_TLV_MAX
 } eap_teap_tlv_type_t;
 
+typedef enum eap_teap_tlv_crypto_binding_tlv_flags_t {
+	EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_EMSK = 1,	// 1
+	EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_MSK,		// 2
+	EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_BOTH		// 3
+} eap_teap_tlv_crypto_binding_tlv_flags_t;
+
 typedef enum eap_teap_tlv_crypto_binding_tlv_subtype_t {
 	EAP_TEAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST = 0,	// 0
 	EAP_TEAP_TLV_CRYPTO_BINDING_SUBTYPE_RESPONSE		// 1
 } eap_teap_tlv_crypto_binding_tlv_subtype_t;
-
-/* RFC 7170 - Key Derivations Used in the EAP-TEAP Provisioning Exchange */
-typedef struct eap_teap_keyblock_t {
-	uint8_t	session_key_seed[EAP_TEAP_SKS_LEN];
-	uint8_t	server_challenge[CHAP_VALUE_LENGTH];
-	uint8_t	client_challenge[CHAP_VALUE_LENGTH];
-} CC_HINT(__packed__) eap_teap_keyblock_t;
-
 
 typedef struct teap_tunnel_t {
 	VALUE_PAIR	*username;
@@ -226,19 +223,18 @@ typedef struct teap_tunnel_t {
 	bool		use_tunneled_reply;
 
 	bool			authenticated;
+	int			received_version;
 
 	int			mode;
 	eap_teap_stage_t	stage;
-	eap_teap_keyblock_t	*keyblock;
-	uint8_t			*simck;
-	uint8_t			*cmk;
+
 	int			imckc;
 	struct {
-		uint8_t		mppe_send[CHAP_VALUE_LENGTH];
-		uint8_t		mppe_recv[CHAP_VALUE_LENGTH];
-	} CC_HINT(__packed__)	isk;
-	uint8_t			*msk;
-	uint8_t			*emsk;
+		uint8_t		simck[EAP_TEAP_SIMCK_LEN];
+		uint8_t		cmk[EAP_TEAP_CMK_LEN];
+	} CC_HINT(__packed__)	imck;
+	uint8_t			msk[EAP_TEAP_MSK_LEN];
+	uint8_t			emsk[EAP_TEAP_EMSK_LEN];
 
 	int			default_method;
 

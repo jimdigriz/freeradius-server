@@ -26,9 +26,31 @@ RCSID("$Id$")
 USES_APPLE_DEPRECATED_API	/* OpenSSL API has been deprecated by Apple */
 
 #include "eap_tls.h"
+#include <openssl/kdf.h>
 #include <openssl/ssl.h>
 #include <openssl/hmac.h>
 #include <freeradius-devel/openssl3.h>
+
+void TLS_PRF(SSL *ssl,
+	     unsigned char *sec, size_t seclen,
+	     struct iovec *iov, size_t iovcnt,
+	     unsigned char *key, size_t keylen)
+{
+	const EVP_MD *md = SSL_CIPHER_get_handshake_digest(SSL_get_current_cipher(ssl));
+
+	EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_TLS1_PRF, NULL);
+
+	EVP_PKEY_derive_init(pctx);
+	EVP_PKEY_CTX_set_tls1_prf_md(pctx, md);
+	EVP_PKEY_CTX_set1_tls1_prf_secret(pctx, sec, seclen);
+	for (int i = 0; i < iovcnt; i++) {
+		EVP_PKEY_CTX_add1_tls1_prf_seed(pctx, iov[i].iov_base, iov[i].iov_len);
+	}
+
+	EVP_PKEY_derive(pctx, key, &keylen);
+
+	EVP_PKEY_CTX_free(pctx);
+}
 
 /*
  *	TLS P_hash from RFC 2246/5246 section 5
@@ -92,7 +114,7 @@ static void P_hash(EVP_MD const *evp_md,
  *	TLS PRF from RFC 2246 section 5
  */
 static void PRF(unsigned char const *secret, unsigned int secret_len,
-		unsigned char const *seed,   unsigned int seed_len,
+		unsigned char const *seed, unsigned int seed_len,
 		unsigned char *out, unsigned int out_len)
 {
 	uint8_t buf[out_len + (out_len % SHA_DIGEST_LENGTH)];
@@ -114,7 +136,7 @@ static void PRF(unsigned char const *secret, unsigned int secret_len,
  *	TLS 1.2 PRF from RFC 5246 section 5
  */
 static void PRFv12(unsigned char const *secret, unsigned int secret_len,
-		   unsigned char const *seed,   unsigned int seed_len,
+		   unsigned char const *seed, unsigned int seed_len,
 		   unsigned char *out, unsigned int out_len)
 {
 	P_hash(EVP_sha256(), secret, secret_len, seed, seed_len, out, out_len);
