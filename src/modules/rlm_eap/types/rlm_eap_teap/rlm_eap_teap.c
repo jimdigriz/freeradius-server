@@ -181,13 +181,11 @@ static int mod_session_init(void *type_arg, eap_handler_t *handler)
 	handler->opaque = ((void *)ssn);
 
 	/*
-	 *	Set the label to a fixed string.  For TLS 1.3, the
-	 *	label is the same for all TLS-based EAP methods.  If
-	 *	the client is using TLS 1.3, then eaptls_success()
-	 *	will over-ride this label with the correct label for
-	 *	TLS 1.3.
+	 *	As TEAP is a unique special snowflake and wants to use its
+	 *	own rolling MSK for MPPE we we set the label to NULL so in that
+	 *	eaptls_gen_mppe_keys() is NOT called in eaptls_success.
 	 */
-	ssn->label = "EXPORTER: teap session key seed";
+	ssn->label = NULL;
 
 	/*
 	 *	Really just protocol version.

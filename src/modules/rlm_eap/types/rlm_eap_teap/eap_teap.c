@@ -73,7 +73,7 @@ static void eap_teap_init_keys(REQUEST *request, tls_session_t *tls_session)
 	rad_assert(t->imckc == 0);
 
 	/* S-IMCK[0] = session_key_seed (RFC7170, Section 5.1) */
-	eaptls_gen_keys_only(request, tls_session->ssl, tls_session->label, NULL, 0, t->imck.simck, sizeof(t->imck.simck));
+	eaptls_gen_keys_only(request, tls_session->ssl, "EXPORTER: teap session key seed", NULL, 0, t->imck.simck, sizeof(t->imck.simck));
 	RDEBUGHEX("S-IMCK[0]", t->imck.simck, sizeof(t->imck.simck));
 }
 
@@ -436,10 +436,9 @@ unexpected:
 		goto unexpected;
 	}
 
-	if (num[EAP_TEAP_TLV_INTERMED_RESULT] > 0 && num[EAP_TEAP_TLV_RESULT]) {
-		RDEBUG("NAK TLV sent with non-NAK TLVs.  Rejecting request.");
-		goto unexpected;
-	}
+	/*
+	 * RFC7170 EID5844 says we can have Intermediate-Result and Result TLVs all in one
+	 */
 
 	/*
 	 * Check mandatory or not mandatory TLVs.
@@ -459,13 +458,10 @@ unexpected:
 		break;
 	case CRYPTOBIND_CHECK:
 	{
-		uint32_t bits = (t->result_final)
-				? 1 << EAP_TEAP_TLV_RESULT
-				: 1 << EAP_TEAP_TLV_INTERMED_RESULT;
-		if (present & ~(bits | (1 << EAP_TEAP_TLV_CRYPTO_BINDING) | (1 << EAP_TEAP_TLV_PAC))) {
-			RDEBUG("Unexpected TLVs in cryptobind checking stage");
-			goto unexpected;
-		}
+		/*
+		 * RFC7170 EID5844 says we can have Crypto-Binding,
+		 * Intermediate-Result and Result TLVs all in one
+		 */
 		break;
 	}
 	case PROVISIONING:
@@ -546,6 +542,7 @@ static ssize_t eap_teap_decode_vp(TALLOC_CTX *request, DICT_ATTR const *parent,
 		break;
 
 	case PW_TYPE_INTEGER:
+	case PW_TYPE_SIGNED:	/* overloaded with vp_integer */
 		memcpy(&vp->vp_integer, p, 4);
 		vp->vp_integer = ntohl(vp->vp_integer);
 		break;
@@ -608,11 +605,6 @@ static ssize_t eap_teap_decode_vp(TALLOC_CTX *request, DICT_ATTR const *parent,
 			addr &= mask;
 			memcpy(vp->vp_ipv4prefix + 2, &addr, sizeof(addr));
 		}
-		break;
-
-	case PW_TYPE_SIGNED:	/* overloaded with vp_integer */
-		memcpy(&vp->vp_integer, p, 4);
-		vp->vp_integer = ntohl(vp->vp_integer);
 		break;
 
 	default:
@@ -849,11 +841,13 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 			}
 		}
 		eap_teap_derive_imck(request, tls_session, msk, sizeof(msk), NULL, 0);
+		eap_teap_append_result(tls_session, reply->code);
 		break;
 
 	case PW_CODE_ACCESS_REJECT:
 		RDEBUG("Got tunneled Access-Reject");
 		rcode = RLM_MODULE_REJECT;
+		eap_teap_append_result(tls_session, reply->code);
 		break;
 
 	/*
@@ -1115,13 +1109,13 @@ static PW_CODE eap_teap_crypto_binding(UNUSED REQUEST *request, UNUSED eap_handl
 static PW_CODE eap_teap_process_tlvs(REQUEST *request, eap_handler_t *eap_session,
 				     tls_session_t *tls_session, VALUE_PAIR *teap_vps)
 {
-	teap_tunnel_t		*t = (teap_tunnel_t *) tls_session->opaque;
+	teap_tunnel_t			*t = (teap_tunnel_t *) tls_session->opaque;
 	VALUE_PAIR			*vp;
 	vp_cursor_t			cursor;
 	eap_tlv_crypto_binding_tlv_t	*binding = NULL;
+	PW_CODE code			= PW_CODE_ACCESS_ACCEPT;
 
 	for (vp = fr_cursor_init(&cursor, &teap_vps); vp; vp = fr_cursor_next(&cursor)) {
-		PW_CODE code = PW_CODE_ACCESS_REJECT;
 		char *value;
 		DICT_ATTR const *parent_da = NULL;
 		parent_da = dict_parent(vp->da->attr, vp->da->vendor);
@@ -1138,70 +1132,60 @@ static PW_CODE eap_teap_process_tlvs(REQUEST *request, eap_handler_t *eap_sessio
 			switch (vp->da->attr >> 8) {
 			case EAP_TEAP_TLV_EAP_PAYLOAD:
 				code = eap_teap_eap_payload(request, eap_session, tls_session, vp);
-				if (code == PW_CODE_ACCESS_ACCEPT)
-					t->stage = CRYPTOBIND_CHECK;
+				if (code == PW_CODE_ACCESS_ACCEPT) t->stage = CRYPTOBIND_CHECK;
+				break;
+			case EAP_TEAP_TLV_INTERMED_RESULT:
+				if (ntohs(*(uint16_t *)vp->vp_octets) != EAP_TEAP_TLV_RESULT_SUCCESS) code = PW_CODE_ACCESS_REJECT;
+				if (t->stage < PROVISIONING) t->stage = PROVISIONING;
 				break;
 			case EAP_TEAP_TLV_RESULT:
-			case EAP_TEAP_TLV_INTERMED_RESULT:
-				code = PW_CODE_ACCESS_ACCEPT;
-				t->stage = PROVISIONING;
+				if (vp->vp_short != EAP_TEAP_TLV_RESULT_SUCCESS) code = PW_CODE_ACCESS_REJECT;
+				t->stage = COMPLETE;
 				break;
 			case EAP_TEAP_TLV_CRYPTO_BINDING:
 				if (!binding && (vp->vp_length >= sizeof(eap_tlv_crypto_binding_tlv_t))) {
-					binding = (eap_tlv_crypto_binding_tlv_t *)vp->vp_octets;
+					code = eap_teap_crypto_binding(request, eap_session, tls_session,
+								       (eap_tlv_crypto_binding_tlv_t *)vp->vp_octets);
 				}
-				continue;
+				break;
 			default:
 				value = vp_aprints_value(request->packet, vp, '"');
 				RDEBUG2("ignoring unknown %s", value);
 				talloc_free(value);
-				continue;
 			}
 			break;
 		case PW_EAP_TEAP_TLV_PAC:
 			switch ( ( vp->da->attr >> 16 )) {
 			case PAC_INFO_PAC_ACK:
 				if (vp->vp_integer == EAP_TEAP_TLV_RESULT_SUCCESS) {
-					code = PW_CODE_ACCESS_ACCEPT;
 					t->pac.expires = UINT32_MAX;
 					t->pac.expired = false;
-					t->stage = COMPLETE;
 				}
 				break;
 			case PAC_INFO_PAC_TYPE:
 				if (vp->vp_integer != PAC_TYPE_TUNNEL) {
 					RDEBUG("only able to serve Tunnel PAC's, ignoring request");
-					continue;
+					break;
 				}
 				t->pac.send = true;
-				continue;
+				break;
 			default:
 				value = vp_aprints(request->packet, vp, '"');
 				RDEBUG2("ignoring unknown EAP-TEAP-PAC-TLV %s", value);
 				talloc_free(value);
-				continue;
 			}
 			break;
 		default:
 			value = vp_aprints(request->packet, vp, '"');
 			RDEBUG2("ignoring EAP-TEAP TLV %s", value);
 			talloc_free(value);
-			continue;
 		}
 
 		if (code == PW_CODE_ACCESS_REJECT)
 			return PW_CODE_ACCESS_REJECT;
 	}
 
-	if (binding) {
-		PW_CODE code = eap_teap_crypto_binding(request, eap_session, tls_session, binding);
-		if (code == PW_CODE_ACCESS_ACCEPT) {
-			t->stage = PROVISIONING;
-		}
-		return code;
-	}
-
-	return PW_CODE_ACCESS_ACCEPT;
+	return code;
 }
 
 
@@ -1308,31 +1292,31 @@ PW_CODE eap_teap_process(eap_handler_t *eap_session, tls_session_t *tls_session)
 		break;
 	case CRYPTOBIND_CHECK:
 	{
-		if (t->mode != EAP_TEAP_PROVISIONING_ANON && !t->pac.send)
-			t->result_final = true;
-
-		eap_teap_append_result(tls_session, code);
-
 		eap_teap_append_crypto_binding(request, tls_session);
 
 		code = PW_CODE_ACCESS_CHALLENGE;
-		break;
+
+#if 0
+		if (!(t->mode != EAP_TEAP_PROVISIONING_ANON && !t->pac.send)) break;
+#endif
+
+		/* fallthrough */
 	}
 	case PROVISIONING:
 		t->result_final = true;
 
 		eap_teap_append_result(tls_session, code);
-
+#if 0
 		if (t->pac.send) {
 			RDEBUG("Peer requires new PAC");
-//			eap_teap_send_pac_tunnel(request, tls_session);
+			eap_teap_send_pac_tunnel(request, tls_session);
 			code = PW_CODE_ACCESS_CHALLENGE;
 			break;
 		}
-
-		t->stage = COMPLETE;
-		/* fallthrough */
+#endif
+		break;
 	case COMPLETE:
+#if 0
 		/*
 		 * RFC 7170 - Network Access after EAP-TEAP Provisioning
 		 */
@@ -1347,10 +1331,9 @@ PW_CODE eap_teap_process(eap_handler_t *eap_session, tls_session_t *tls_session)
 			code = PW_CODE_ACCESS_REJECT;
 			break;
 		}
-
+#endif
 		/*
-		 * eap_tls_gen_mppe_keys() is unsuitable for EAP-TEAP as Cisco decided
-		 * it would be a great idea to flip the recv/send keys around
+		 * TEAP wants to use it's own MSK, so boo to eap_tls_gen_mppe_keys()
 		 */
 		#define EAPTLS_MPPE_KEY_LEN 32
 		eap_add_reply(request, "MS-MPPE-Recv-Key", t->msk, EAPTLS_MPPE_KEY_LEN);
