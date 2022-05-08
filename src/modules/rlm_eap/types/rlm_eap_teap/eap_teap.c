@@ -977,8 +977,7 @@ static PW_CODE eap_teap_eap_payload(REQUEST *request, eap_handler_t *eap_session
 		vp = fr_pair_list_copy(fake->packet, t->state);
 		if (vp) fr_pair_add(&fake->packet->vps, vp);
 	}
-
-
+#if 0
 	if (t->stage == AUTHENTICATION) {	/* FIXME do this only for MSCHAPv2 */
 		VALUE_PAIR *tvp;
 
@@ -987,7 +986,7 @@ static PW_CODE eap_teap_eap_payload(REQUEST *request, eap_handler_t *eap_session
 		vp->vp_integer = t->default_method;
 
 		/*
-		 * RFC 67170 - Authenticating Using EAP-TEAP-MSCHAPv2
+		 * RFC 7170 - Authenticating Using EAP-TEAP-MSCHAPv2
 		 */
 		if (t->mode == EAP_TEAP_PROVISIONING_ANON) {
 			tvp = fr_pair_afrom_num(fake, PW_MSCHAP_CHALLENGE, VENDORPEC_MICROSOFT);
@@ -999,7 +998,7 @@ static PW_CODE eap_teap_eap_payload(REQUEST *request, eap_handler_t *eap_session
 			fr_pair_add(&fake->config, tvp);
 		}
 	}
-
+#endif
 	if (t->copy_request_to_tunnel) {
 		eapteap_copy_request_to_tunnel(request, fake);
 	}
