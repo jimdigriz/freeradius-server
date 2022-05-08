@@ -150,10 +150,10 @@ typedef struct _tls_session_t {
 	bool		fragment;			//!< Flag, In fragment mode or not.
 	bool		length_flag;			//!< A flag to include length in every TLS Data/Alert packet.
 							//!< If set to no then only the first fragment contains length.
-	bool		outer_tlv_length;		//!< include outer TLV length
 	int		peap_flag;
 
 	VALUE_PAIR	*outer_tlvs;			//!< only for TEAP, and only for the first fragment.
+	uint8_t		*outer_tlvs_octets;		//!< only for TEAP, needed for Crypto-Binding TLV
 
 	size_t		tls_record_in_total_len;	//!< How long the peer indicated the complete tls record
 							//!< would be.

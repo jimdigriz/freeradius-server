@@ -102,29 +102,6 @@ tls_session_t *eaptls_session(eap_handler_t *handler, fr_tls_server_conf_t *tls_
 	return talloc_steal(handler, ssn); /* ssn */
 }
 
-/*
-   The S flag is set only within the EAP-TLS start message
-   sent from the EAP server to the peer.
-*/
-int eaptls_start(EAP_DS *eap_ds, int peap_flag)
-{
-	EAPTLS_PACKET 	reply;
-
-	reply.code = FR_TLS_START;
-	reply.length = TLS_HEADER_LEN + 1/*flags*/;
-
-	reply.flags = peap_flag;
-	reply.flags = SET_START(reply.flags);
-
-	reply.data = NULL;
-	reply.dlen = 0;
-
-	eaptls_compose(eap_ds, &reply);
-
-	return 1;
-}
-
-
 /** Send an EAP-TLS success
  *
  * Composes an EAP-TLS-Success.  This is a message with code EAP_TLS_ESTABLISHED.
@@ -230,15 +207,20 @@ int eaptls_fail(eap_handler_t *handler, int peap_flag)
  *	EAP-Request.  We always embed the TLS-length in all EAP-TLS
  *	packets that we send, for easy reference purpose.  Handle
  *	fragmentation and sending the next fragment etc.
+ *
+ *	FIXME: support fragments start due to TEAP outer tlvs
  */
-int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
+int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn, bool start)
 {
 	EAPTLS_PACKET	reply;
 	unsigned int	size;
 	unsigned int 	lbit = 0;
 	unsigned int 	obit = 0;
-	unsigned int	tlv_len = 0;
-	uint8_t		*tlvs = NULL;
+	VALUE_PAIR	*vp;
+	vp_cursor_t	cursor;
+	uint32_t	nlen;
+	uint16_t	ohdr[2];
+	uint32_t	olen;
 
 	/* This value determines whether we set (L)ength flag for
 		EVERY packet we send and add corresponding
@@ -264,20 +246,27 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 	 *	This is included in the first fragment, and then never
 	 *	afterwards.
 	 */
-	if (ssn->outer_tlv_length) {
-		obit = 4;
-		ssn->outer_tlv_length = 0;
-
-		/*
-		 *	@todo - encode the outer tlvs
-		 */
+	if (start && ssn->outer_tlvs) {
+		for (vp = fr_cursor_init(&cursor, &ssn->outer_tlvs);
+		     vp;
+		     vp = fr_cursor_next(&cursor)) {
+			if (vp->da->type != PW_TYPE_OCTETS) {
+				DEBUG("FIXME Outer-TLV %s is of not type octets", vp->da->name);
+				continue;
+			}
+			obit = 4;
+			olen = 0;
+			break;
+		}
 	}
+
 	if (ssn->fragment == 0) {
 		ssn->tls_msg_len = ssn->dirty_out.used;
 	}
 
-	reply.code = FR_TLS_REQUEST;
+	reply.code = start ? FR_TLS_START : FR_TLS_REQUEST;
 	reply.flags = ssn->peap_flag;
+	if (start) reply.flags = SET_START(reply.flags);
 
 	/* Send data, NOT more than the FRAGMENT size */
 	if (ssn->dirty_out.used > ssn->mtu) {
@@ -293,24 +282,41 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 		ssn->fragment = 0;
 	}
 
-	reply.dlen = lbit + obit + size + tlv_len;
-	reply.length = TLS_HEADER_LEN + 1 /*flags*/ + reply.dlen;
+	if (obit) {
+		for (vp = fr_cursor_init(&cursor, &ssn->outer_tlvs);
+		     vp;
+		     vp = fr_cursor_next(&cursor)) {
+			if (vp->da->type != PW_TYPE_OCTETS) continue;
+			olen += sizeof(ohdr) + vp->vp_length;
+		}
+	}
+
+	reply.dlen = lbit + obit + size + olen;
+	reply.length = TLS_HEADER_LEN + 1/*flags*/ + reply.dlen;
 
 	reply.data = talloc_array(eap_ds, uint8_t, reply.length);
 	if (!reply.data) return 0;
 
 	if (lbit) {
-		uint32_t 	nlen;
-
 		nlen = htonl(ssn->tls_msg_len);
-		memcpy(reply.data, &nlen, lbit);
+		memcpy(reply.data, &nlen, sizeof(nlen));
 		reply.flags = SET_LENGTH_INCLUDED(reply.flags);
-
-		if (obit) {
-			nlen = htonl(tlv_len);
-			memcpy(reply.data + lbit, &nlen, obit);
-			reply.flags = SET_OUTER_TLV_INCLUDED(reply.flags);
+	}
+	if (obit) {
+		nlen = 0;
+		for (vp = fr_cursor_init(&cursor, &ssn->outer_tlvs);
+		     vp;
+		     vp = fr_cursor_next(&cursor)) {
+			if (vp->da->type != PW_TYPE_OCTETS) continue;
+			nlen += sizeof(ohdr) + vp->vp_length;
 		}
+
+		ssn->outer_tlvs_octets = talloc_array(ssn, uint8_t, olen);
+		if (!ssn->outer_tlvs_octets) return 0;
+
+		nlen = htonl(nlen);
+		memcpy(reply.data + lbit, &nlen, sizeof(nlen));
+		reply.flags = SET_OUTER_TLV_INCLUDED(reply.flags);
 	}
 
 	(ssn->record_minus)(&ssn->dirty_out, reply.data + lbit + obit, size);
@@ -318,9 +324,32 @@ int eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn)
 	/*
 	 *	Tack on the outer TLVs after the TLS data.
 	 */
-	if (tlv_len) {
-		memcpy(reply.data + lbit + obit + size, tlvs, tlv_len);
-		talloc_free(tlvs);
+	if (obit) {
+		olen = 0;
+		for (vp = fr_cursor_init(&cursor, &ssn->outer_tlvs);
+		     vp;
+		     vp = fr_cursor_next(&cursor)) {
+			if (vp->da->type != PW_TYPE_OCTETS) continue;
+
+			/* FIXME duplicates eap_teap_tlv_append */
+
+			/*
+			 *	RFC7170, Section 4.3.1 - Outer TLVs must be marked optional
+			 */
+			ohdr[0] = htons((vp->da->attr >> fr_attr_shift[1]) & fr_attr_mask[1]);
+			ohdr[1] = htons(vp->vp_length);
+
+			/* use by Crypto-Binding TLV */
+			memcpy(ssn->outer_tlvs_octets + olen, ohdr, sizeof(ohdr));
+			olen += sizeof(ohdr);
+			memcpy(ssn->outer_tlvs_octets + olen, vp->vp_octets, vp->vp_length);
+			olen += vp->vp_length;
+
+			memcpy(reply.data + lbit + obit + size, ohdr, sizeof(ohdr));
+			size += sizeof(ohdr);
+			memcpy(reply.data + lbit + obit + size, vp->vp_octets, vp->vp_length);
+			size += vp->vp_length;
+		}
 	}
 
 	eaptls_compose(eap_ds, &reply);
@@ -793,7 +822,7 @@ static fr_tls_status_t eaptls_operation(fr_tls_status_t status, eap_handler_t *h
 	 *	TLS proper can decide what to do, then.
 	 */
 	if (tls_session->dirty_out.used > 0) {
-		eaptls_request(handler->eap_ds, tls_session);
+		eaptls_request(handler->eap_ds, tls_session, false);
 		return FR_TLS_HANDLED;
 	}
 
@@ -899,7 +928,7 @@ fr_tls_status_t eaptls_process(eap_handler_t *handler)
 	 *	of fragments" phase.
 	 */
 	case FR_TLS_REQUEST:
-		eaptls_request(handler->eap_ds, tls_session);
+		eaptls_request(handler->eap_ds, tls_session, false);
 		status = FR_TLS_HANDLED;
 		goto done;
 

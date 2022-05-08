@@ -47,12 +47,13 @@ struct crypto_binding_buffer {
 	uint16_t			length;
 	eap_tlv_crypto_binding_tlv_t	binding;
 	uint8_t				eap_type;
+	uint8_t				outer_tlvs[1];
 } CC_HINT(__packed__);
-#define CRYPTO_BINDING_BUFFER_INIT(_buf) \
+#define CRYPTO_BINDING_BUFFER_INIT(_cbb) \
 do {\
-	buf.tlv_type = htons(EAP_TEAP_TLV_MANDATORY | EAP_TEAP_TLV_CRYPTO_BINDING);\
-	buf.length = htons(sizeof(struct eap_tlv_crypto_binding_tlv_t));\
-	buf.eap_type = PW_EAP_TEAP;\
+	_cbb->tlv_type = htons(EAP_TEAP_TLV_MANDATORY | EAP_TEAP_TLV_CRYPTO_BINDING);\
+	_cbb->length = htons(sizeof(struct eap_tlv_crypto_binding_tlv_t));\
+	_cbb->eap_type = PW_EAP_TEAP;\
 } while (0)
 
 /**
@@ -155,7 +156,7 @@ static void eap_teap_derive_imck(REQUEST *request, tls_session_t *tls_session,
 	RDEBUGHEX("EMSK", t->emsk, sizeof(t->emsk));
 }
 
-void eap_teap_tlv_append(tls_session_t *tls_session, int tlv, bool mandatory, int length, const void *data)
+static void eap_teap_tlv_append(tls_session_t *tls_session, int tlv, bool mandatory, int length, const void *data)
 {
 	uint16_t hdr[2];
 
@@ -282,33 +283,43 @@ static void eap_teap_append_crypto_binding(REQUEST *request, tls_session_t *tls_
 	teap_tunnel_t			*t = tls_session->opaque;
 	uint8_t				mac[EVP_MAX_MD_SIZE];
 	unsigned int			maclen = sizeof(mac);
-	struct crypto_binding_buffer	buf = {0};
+	uint8_t				*buf;
+	unsigned int			olen;
+	struct crypto_binding_buffer	*cbb;
 
 	RDEBUG("Sending Cryptobinding");
 
-	CRYPTO_BINDING_BUFFER_INIT(buf);
-	buf.binding.version = EAP_TEAP_VERSION;
-	buf.binding.received_version = t->received_version;
+	olen = tls_session->outer_tlvs_octets ? talloc_array_length(tls_session->outer_tlvs_octets) : 0;
+
+	buf = talloc_zero_array(request, uint8_t, sizeof(struct crypto_binding_buffer) - 1/*outer_tlvs*/ + olen);
+	rad_assert(buf != NULL);
+
+	cbb = (struct crypto_binding_buffer *)buf;
+
+	CRYPTO_BINDING_BUFFER_INIT(cbb);
+	cbb->binding.version = EAP_TEAP_VERSION;
+	cbb->binding.received_version = t->received_version;
 #if 0
-	buf.binding.subtype = (EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_BOTH << 4) | EAP_TEAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST;
+	cbb->binding.subtype = (EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_BOTH << 4) | EAP_TEAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST;
 #endif
-	buf.binding.subtype = (EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_MSK << 4) | EAP_TEAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST;
+	cbb->binding.subtype = (EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_MSK << 4) | EAP_TEAP_TLV_CRYPTO_BINDING_SUBTYPE_REQUEST;
 
-	rad_assert(sizeof(buf.binding.nonce) % sizeof(uint32_t) == 0);
-	RANDFILL(buf.binding.nonce);
-	buf.binding.nonce[sizeof(buf.binding.nonce) - 1] &= ~0x01; /* RFC 7170, Section 4.2.13 */
+	rad_assert(sizeof(cbb->binding.nonce) % sizeof(uint32_t) == 0);
+	RANDFILL(cbb->binding.nonce);
+	cbb->binding.nonce[sizeof(cbb->binding.nonce) - 1] &= ~0x01; /* RFC 7170, Section 4.2.13 */
+	if (olen) memcpy(cbb->outer_tlvs, tls_session->outer_tlvs_octets, olen);
 
-	RDEBUGHEX("BUFFER for Compound MAC calculation", (uint8_t *)&buf, sizeof(buf));
+	RDEBUGHEX("BUFFER for Compound MAC calculation", buf, talloc_array_length(buf));
 
 	const EVP_MD *md = SSL_CIPHER_get_handshake_digest(SSL_get_current_cipher(tls_session->ssl));
 #if 0
-	HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), (uint8_t *)&buf, sizeof(buf), mac, &maclen);
-	memcpy(buf.binding.emsk_compound_mac, &mac, sizeof(buf.binding.emsk_compound_mac));
+	HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), buf, talloc_array_length(buf), mac, &maclen);
+	memcpy(cbb->binding.emsk_compound_mac, &mac, sizeof(cbb->binding.emsk_compound_mac));
 #endif
-	HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), (uint8_t *)&buf, sizeof(buf), mac, &maclen);
-	memcpy(buf.binding.msk_compound_mac, &mac, sizeof(buf.binding.msk_compound_mac));
+	HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), buf, talloc_array_length(buf), mac, &maclen);
+	memcpy(cbb->binding.msk_compound_mac, &mac, sizeof(cbb->binding.msk_compound_mac));
 
-	eap_teap_tlv_append(tls_session, EAP_TEAP_TLV_CRYPTO_BINDING, true, sizeof(buf.binding), (uint8_t *)&buf.binding);
+	eap_teap_tlv_append(tls_session, EAP_TEAP_TLV_CRYPTO_BINDING, true, sizeof(cbb->binding), (uint8_t *)&cbb->binding);
 }
 
 static int eap_teap_verify(REQUEST *request, tls_session_t *tls_session, uint8_t const *data, unsigned int data_len)
@@ -1060,10 +1071,20 @@ static PW_CODE eap_teap_crypto_binding(UNUSED REQUEST *request, UNUSED eap_handl
 				       UNUSED tls_session_t *tls_session, UNUSED eap_tlv_crypto_binding_tlv_t *binding)
 {
 	teap_tunnel_t			*t = tls_session->opaque;
-	struct crypto_binding_buffer	buf = {0};
+	uint8_t				*buf;
+	unsigned int			olen;
+	struct crypto_binding_buffer	*cbb;
 	uint8_t				mac[EVP_MAX_MD_SIZE];
 	unsigned int			maclen = sizeof(mac);
 	unsigned int			flags;
+
+	olen = tls_session->outer_tlvs_octets ? talloc_array_length(tls_session->outer_tlvs_octets) : 0;
+	/* FIXME: include client outer TLVs */
+
+	buf = talloc_zero_array(request, uint8_t, sizeof(struct crypto_binding_buffer) - 1/*outer_tlvs*/ + olen);
+	rad_assert(buf != NULL);
+
+	cbb = (struct crypto_binding_buffer *)buf;
 
 	if (binding->version != t->received_version || binding->received_version != EAP_TEAP_VERSION) {
 		RDEBUG2("Crypto-Binding TLV version mis-match (possible downgrade attack!)");
@@ -1075,22 +1096,23 @@ static PW_CODE eap_teap_crypto_binding(UNUSED REQUEST *request, UNUSED eap_handl
 	}
 	flags = binding->subtype >> 4;
 
-	CRYPTO_BINDING_BUFFER_INIT(buf);
-	memcpy(&buf.binding, binding, sizeof(buf.binding) - sizeof(buf.binding.emsk_compound_mac) - sizeof(buf.binding.msk_compound_mac));
+	CRYPTO_BINDING_BUFFER_INIT(cbb);
+	memcpy(&cbb->binding, binding, sizeof(cbb->binding) - sizeof(cbb->binding.emsk_compound_mac) - sizeof(cbb->binding.msk_compound_mac));
+	if (olen) memcpy(cbb->outer_tlvs, tls_session->outer_tlvs_octets, olen);
 
-	RDEBUGHEX("BUFFER for Compound MAC calculation", (uint8_t *)&buf, sizeof(buf));
+	RDEBUGHEX("BUFFER for Compound MAC calculation", buf, talloc_array_length(buf));
 
 	const EVP_MD *md = SSL_CIPHER_get_handshake_digest(SSL_get_current_cipher(tls_session->ssl));
 
 	if (flags != EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_MSK) {
-		HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), (uint8_t *)&buf, sizeof(buf), mac, &maclen);
+		HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), buf, talloc_array_length(buf), mac, &maclen);
 		if (memcmp(binding->emsk_compound_mac, mac, sizeof(binding->emsk_compound_mac))) {
 			RDEBUG2("Crypto-Binding TLV (EMSK) mis-match");
 			return PW_CODE_ACCESS_REJECT;
 		}
 	}
 	if (flags != EAP_TEAP_TLV_CRYPTO_BINDING_FLAGS_CMAC_EMSK) {
-		HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), (uint8_t *)&buf, sizeof(buf), mac, &maclen);
+		HMAC(md, &t->imck.cmk, sizeof(t->imck.cmk), buf, talloc_array_length(buf), mac, &maclen);
 		if (memcmp(binding->msk_compound_mac, mac, sizeof(binding->msk_compound_mac))) {
 			RDEBUG2("Crypto-Binding TLV (MSK) mis-match");
 			return PW_CODE_ACCESS_REJECT;

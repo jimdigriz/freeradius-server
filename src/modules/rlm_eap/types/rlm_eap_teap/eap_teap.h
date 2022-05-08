@@ -263,8 +263,6 @@ typedef struct teap_tunnel_t {
 /*
  *	Process the TEAP portion of an EAP-TEAP request.
  */
-void eap_teap_tlv_append(tls_session_t *tls_session, int tlv, bool mandatory,
-			 int length, const void *data) CC_HINT(nonnull);
 PW_CODE eap_teap_process(eap_handler_t *handler, tls_session_t *tls_session) CC_HINT(nonnull);
 
 /*

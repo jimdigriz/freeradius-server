@@ -52,14 +52,18 @@ typedef struct rlm_eap_teap_t {
 	bool copy_request_to_tunnel;
 
 	/*
-	 *	Virtual server for inner tunnel session.
-	 */
-	char const *virtual_server;
-
-	/*
 	 * 	Do we do require a client cert?
 	 */
 	bool req_client_cert;
+
+	uint32_t pac_lifetime;
+	char const *authority_identity;
+	char const *pac_opaque_key;
+
+	/*
+	 *	Virtual server for inner tunnel session.
+	 */
+	char const *virtual_server;
 } rlm_eap_teap_t;
 
 
@@ -68,8 +72,11 @@ static CONF_PARSER module_config[] = {
 	{ "default_eap_type", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_eap_teap_t, default_method_name), "md5" },
 	{ "copy_request_to_tunnel", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_eap_teap_t, copy_request_to_tunnel), "no" },
 	{ "use_tunneled_reply", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_eap_teap_t, use_tunneled_reply), "no" },
-	{ "virtual_server", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_eap_teap_t, virtual_server), NULL },
 	{ "require_client_cert", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_eap_teap_t, req_client_cert), "no" },
+	{ "pac_lifetime", FR_CONF_OFFSET(PW_TYPE_INTEGER, rlm_eap_teap_t, pac_lifetime), "604800" },
+	{ "authority_identity", FR_CONF_OFFSET(PW_TYPE_STRING | PW_TYPE_REQUIRED, rlm_eap_teap_t, authority_identity), NULL },
+	{ "pac_opaque_key", FR_CONF_OFFSET(PW_TYPE_STRING | PW_TYPE_REQUIRED, rlm_eap_teap_t, pac_opaque_key), NULL },
+	{ "virtual_server", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_eap_teap_t, virtual_server), NULL },
 	CONF_PARSER_TERMINATOR
 };
 
@@ -192,17 +199,21 @@ static int mod_session_init(void *type_arg, eap_handler_t *handler)
 	 */
 	ssn->peap_flag = EAP_TEAP_VERSION;
 
-	/*
-	 *	First fragment has a Length and Outer TLV length.  Subsequent ones do not.
+        /*
+	 *	hostapd's wpa_supplicant gets upset if we include all the
+	 *	S+L+O flags but is happy with S+O (TLS payload is zero bytes
+	 *	for S anyway) - FIXME not true for early-data TLSv1.3!
 	 */
-	ssn->length_flag = 1;
-	ssn->outer_tlv_length = 1;
+	ssn->length_flag = false;
+
+	vp = fr_pair_make(ssn, NULL, "FreeRADIUS-EAP-TEAP-Authority-ID", inst->authority_identity, T_OP_EQ);
+	fr_pair_add(&ssn->outer_tlvs, vp);
 
 	/*
 	 *	TLS session initialization is over.  Now handle TLS
 	 *	related handshaking or application data.
 	 */
-	status = eaptls_start(handler->eap_ds, ssn->peap_flag);
+	status = eaptls_request(handler->eap_ds, ssn, true);
 	if ((status == FR_TLS_INVALID) || (status == FR_TLS_FAIL)) {
 		REDEBUG("[eaptls start] = %s", fr_int2str(fr_tls_status_table, status, "<INVALID>"));
 	} else {
@@ -233,14 +244,6 @@ static int mod_process(void *arg, eap_handler_t *handler)
 	REQUEST *request = handler->request;
 
 	RDEBUG2("Authenticate");
-
-	/*
-	 *	RFC 7170 Section 3.7 says that the length MUST be in
-	 *	the first fragment, and MUST NOT be in subsequent
-	 *	fragments.
-	 */
-	tls_session->length_flag = 0;
-	tls_session->outer_tlv_length = 0;
 
 	/*
 	 *	Process TLS layer until done.
@@ -289,7 +292,7 @@ static int mod_process(void *arg, eap_handler_t *handler)
 			goto done;
 		} else {
 			goto phase2;
-//			eaptls_request(handler->eap_ds, tls_session);
+//			eaptls_request(handler->eap_ds, tls_session, false);
 		}
 		ret = 1;
 		goto done;
@@ -349,7 +352,7 @@ phase2:
 		 *	Access-Challenge, continue tunneled conversation.
 		 */
 	case PW_CODE_ACCESS_CHALLENGE:
-		eaptls_request(handler->eap_ds, tls_session);
+		eaptls_request(handler->eap_ds, tls_session, false);
 		ret = 1;
 		goto done;
 
