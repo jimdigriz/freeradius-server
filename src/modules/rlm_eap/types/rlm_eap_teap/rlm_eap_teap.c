@@ -190,7 +190,7 @@ static int mod_session_init(void *type_arg, eap_handler_t *handler)
 	/*
 	 *	Really just protocol version.
 	 */
-	ssn->peap_flag = 1;
+	ssn->peap_flag = EAP_TEAP_VERSION;
 
 	/*
 	 *	First fragment has a Length and Outer TLV length.  Subsequent ones do not.
