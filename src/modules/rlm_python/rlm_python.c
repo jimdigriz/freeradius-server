@@ -260,7 +260,7 @@ static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyO
 	vp_tmpl_t  dst;
 	VALUE_PAIR *vp;
 	REQUEST    *current = request;
-	const char *quo;
+	const char *quote;
 
 	memset(&dst, 0, sizeof(dst));
 
