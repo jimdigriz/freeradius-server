@@ -596,20 +596,22 @@ int main(int argc, char *argv[])
 	 *  Write the PID after we've forked, so that we write the correct one.
 	 */
 	if (main_config.write_pid) {
-		FILE *fp;
+		int fd;
+		size_t len;
+		char buffer[256];
 
-		fp = fopen(main_config.pid_file, "w");
-		if (fp != NULL) {
-			/*
-			 *  @fixme What about following symlinks,
-			 *  and having it over-write a normal file?
-			 */
-			fprintf(fp, "%d\n", (int) radius_pid);
-			fclose(fp);
-		} else {
+		fd = open(main_config.pid_file, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0644);
+		if (fd < 0) {
 			ERROR("Failed creating PID file %s: %s", main_config.pid_file, fr_syserror(errno));
 			exit(EXIT_FAILURE);
 		}
+
+		len = snprintf(buffer, sizeof(buffer), "%d\n", (int) radius_pid);
+		if (write(fd, buffer, len) < 0) {
+			ERROR("Failed writing PID file %s: %s", main_config.pid_file, fr_syserror(errno));
+			exit(EXIT_FAILURE);
+		}
+		close(fd);
 	}
 
 	exec_trigger(NULL, NULL, "server.start", false);
