@@ -238,7 +238,7 @@ jobs:
         [ -d /opt/openssl ] && export PATH=/opt/openssl/bin:$PATH
         printf "\nopenssl: " ; openssl version
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Build eapol_test
       run: |
@@ -297,7 +297,7 @@ jobs:
       if: ${{ matrix.env.CC == 'clang' }}
 
     - name: "Clang Static Analyzer: Store assets on failure"
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: clang-scan.tgz
         path: build/plist/**/*.html
@@ -467,7 +467,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Merge into upstream"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
         lfs: false
