@@ -3031,7 +3031,7 @@ int request_proxy_reply(RADIUS_PACKET *packet)
 	ASSERT_MASTER;
 
 	/*
-	 *	These values are checked by the callers in listen.
+	 *	These values are checked by the callers in listen.c
 	 *
 	 *	Arguably if we were re-architecting v3, we would hoist
 	 *	those checks and the listen/client stats updates into
@@ -3083,12 +3083,15 @@ int request_proxy_reply(RADIUS_PACKET *packet)
 
 		/*
 		 *	If the home server configuration requires a Message-Authenticator, then set the flag,
-		 *	but only if the proxied packet is Access-Request or Status-Sercer.
+		 *	but only if the proxied packet is Access-Request.  The library code already enforces
+		 *	Message-Authenticator when sending Status-Server packets.  But it doesn't hurt to
+		 *	enforce it here.
 		 *
 		 *	The realms.c file already clears require_ma for TLS connections.
 		 */
 		require_ma = ((request->home_server->require_ma == FR_BOOL_TRUE) &&
-			      (request->proxy->code == PW_CODE_ACCESS_REQUEST));
+			      ((request->proxy->code == PW_CODE_ACCESS_REQUEST) ||
+			       (request->proxy->code == PW_CODE_STATUS_SERVER)));
 
 		if (!rad_packet_ok(packet, require_ma, &reason)) {
 			DEBUG("Ignoring invalid packet - %s", fr_strerror());
