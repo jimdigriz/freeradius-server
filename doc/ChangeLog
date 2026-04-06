@@ -30,6 +30,8 @@ FreeRADIUS 3.2.9 Wed 20 Aug 2025 12:00:00 UTC urgency=low
 	* Set "suppress_secrets = true" by default.
 	* Add documentation for ntlm_auth and spaces in passwords.
 	  Addresses #5654.
+	* radclient can now suppress Message-Authenticator in Access-Request,
+	  when the input packet contains "Message-Authenticator !* ANY"
 
 	Bug fixes
 	* Many minor bug fixes and cleanups.
