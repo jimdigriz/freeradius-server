@@ -890,7 +890,19 @@ static void deallocate_id(rc_request_t *request)
  */
 static int send_one_packet(rc_request_t *request)
 {
+	VALUE_PAIR *vp;
+	bool message_authenticator;
+
 	assert(request->done == false);
+
+	/*
+	 *	Do we print out an extra Message-Authenticator,
+	 *	because rad_encode() will automatically add it.  And
+	 *	we want to make sure that the debug output matches
+	 *	what's in the packet.
+	 */
+	message_authenticator = ((request->packet->code == PW_CODE_ACCESS_REQUEST) ||
+				 (request->packet->code == PW_CODE_STATUS_SERVER));
 
 	/*
 	 *	Remember when we have to wake up, to re-send the
@@ -959,8 +971,6 @@ static int send_one_packet(rc_request_t *request)
 		assert(request->packet->data == NULL);
 
 		if (request->packet->code == PW_CODE_ACCESS_REQUEST) {
-			VALUE_PAIR *vp;
-
 			if (((vp = fr_pair_find_by_num(request->packet->vps, PW_PACKET_AUTHENTICATION_VECTOR, 0, TAG_ANY)) != NULL) &&
 			    (vp->vp_length >= 16)) {
 				memcpy(request->packet->vector, vp->vp_octets, 16);
@@ -977,8 +987,6 @@ static int send_one_packet(rc_request_t *request)
 		 *	new authentication vector.
 		 */
 		if (request->password) {
-			VALUE_PAIR *vp;
-
 			if ((vp = fr_pair_find_by_num(request->packet->vps, PW_USER_PASSWORD, 0, TAG_ANY)) != NULL) {
 				fr_pair_value_strcpy(vp, request->password->vp_strvalue);
 
@@ -1061,10 +1069,39 @@ static int send_one_packet(rc_request_t *request)
 	}
 
 	/*
+	 *	If there's a Message-Authenticator in the packet, AND
+	 *	it has a "don't send operator", then delete it.  We
+	 *	then set the "tls" flag before encoding it, which
+	 *	skips the automatic addition of Message-Authenticator.
+	 *	We then clear the "tls" flag, and sign the packet
+	 *	before sending it.
+	 */
+	vp = fr_pair_find_by_num(request->packet->vps, PW_MESSAGE_AUTHENTICATOR, 0, TAG_ANY);
+	if (vp && (vp->op == T_OP_CMP_FALSE)) {
+		fr_pair_delete(&request->packet->vps, vp);
+
+		request->packet->tls = true;
+		if (rad_encode(request->packet, NULL, secret) < 0) {
+			REDEBUG("Failed to encode packet for ID %d", request->packet->id);
+			goto error;
+		}
+		request->packet->tls = false;
+		fr_assert(request->packet->offset == 0);
+
+		if (rad_sign(request->packet, NULL, secret) < 0) {
+			REDEBUG("Failed to sign packet for ID %d", request->packet->id);
+			goto error;
+		}
+
+		message_authenticator = false;
+	}
+
+	/*
 	 *	Send the packet.
 	 */
 	if (rad_send(request->packet, NULL, secret) < 0) {
 		REDEBUG("Failed to send packet for ID %d", request->packet->id);
+	error:
 		deallocate_id(request);
 		request->done = true;
 		stats.lost++;
@@ -1076,9 +1113,7 @@ static int send_one_packet(rc_request_t *request)
 
 		if (fr_debug_lvl > 2) rad_print_hex(request->packet);
 
-		if ((fr_debug_lvl > 0) &&
-		    ((request->packet->code == PW_CODE_ACCESS_REQUEST) ||
-		     (request->packet->code == PW_CODE_STATUS_SERVER)) &&
+		if ((fr_debug_lvl > 0) && message_authenticator &&
 		    !fr_pair_find_by_num(request->packet->vps, PW_MESSAGE_AUTHENTICATOR, 0, TAG_ANY)) {
 			fprintf(fr_log_fp, "\tMessage-Authenticator = 0x\n");
 		}
