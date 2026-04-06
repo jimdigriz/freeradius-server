@@ -900,16 +900,17 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 	RDEBUG("Phase 2: Stage %s", stage_name[t->stage]);
 
 	/*
-	 * If the response packet was Access-Accept, then
-	 * we're OK.  If not, die horribly.
+	 *	If the response packet was Access-Accept, then we're
+	 *	OK.  If not, die horribly.
 	 *
-	 * FIXME: EAP-Messages can only start with 'identity',
-	 * NOT 'eap start', so we should check for that....
+	 *	FIXME: EAP-Messages can only start with 'identity',
+	 *	NOT 'eap start', so we should check for that....
 	 */
 	switch (reply->code) {
 	case PW_CODE_ACCESS_ACCEPT:
 		RDEBUG("Phase 2: Got tunneled Access-Accept");
 		msk1 = msk2 = false;
+		t->authenticated = true;
 
 		for (vp = fr_cursor_init(&cursor, &reply->vps); vp; vp = fr_cursor_next(&cursor)) {
 			if (vp->da->vendor == 0) {
@@ -979,7 +980,6 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 			case PW_MSCHAP2_SUCCESS:
 				RDEBUG("Phase 2: Got %s, tunneling it to the client in a challenge", vp->da->name);
 				if (t->use_tunneled_reply) {
-					t->authenticated = true;
 					/*
 					 *	Clean up the tunneled reply.
 					 */
@@ -1261,12 +1261,11 @@ repeat:
 				    (vp->vp_short != identity_type_requested)) {
 					if (t->identity_types[identity_type_requested].required) {
 						REDEBUG("Phase 2: We sent Identity-Type = %s, but the supplicant did not use that method - rejecting the session", identity_type);
-						VALUE_PAIR *vp_auth;
 fail:
-						vp_auth = fr_pair_afrom_num(fake, PW_AUTH_TYPE, 0);
-						if (vp_auth) {
-							fr_pair_add(&fake->config, vp_auth);
-							vp_auth->vp_integer = PW_AUTH_TYPE_REJECT;
+						vp = fr_pair_afrom_num(fake, PW_AUTH_TYPE, 0);
+						if (vp) {
+							fr_pair_add(&fake->config, vp);
+							vp->vp_integer = PW_AUTH_TYPE_REJECT;
 						}
 						goto done;
 					}
@@ -1289,20 +1288,26 @@ fail:
 				fr_pair_delete(&request->state, vp_config);
 
 				/*
-				 * wpa_supplicant continues the authentication even when there are no remaining
-				 * methods configured for it, so we skip only if this is the last round
+				 *	wpa_supplicant continues the authentication even when there are no remaining
+				 *	methods configured for it, so we skip only if this is the last round
 				 */
 				if ((t->identities_remaining == 1) &&
 				    !t->identity_types[identity_type_requested].required &&
 				    !(fr_pair_find_by_num(fake->packet->vps, PW_EAP_MESSAGE, 0, TAG_ANY) ||
 				      fr_pair_find_by_num(fake->packet->vps, PW_USER_PASSWORD, 0, TAG_ANY))) {
-					VALUE_PAIR *vp_auth;
+					/*
+					 *	If we didn't have at least one authentication success, we fail.
+					 */
+					if (!t->authenticated) {
+						RWDEBUG("Phase 2: Did not find authentication material, and previous round was not authenticated");
+						goto fail;
+					}
 
 					RWDEBUG("Phase 2: We sent Identity-Type = %s, but the supplicant did not send any authentication material - skipping optional method", identity_type);
-					vp_auth = fr_pair_afrom_num(fake, PW_AUTH_TYPE, 0);
-					if (vp_auth) {
-						fr_pair_add(&fake->config, vp_auth);
-						vp_auth->vp_integer = PW_AUTH_TYPE_ACCEPT;
+					vp = fr_pair_afrom_num(fake, PW_AUTH_TYPE, 0);
+					if (vp) {
+						fr_pair_add(&fake->config, vp);
+						vp->vp_integer = PW_AUTH_TYPE_ACCEPT;
 					}
 					goto done;
 				}
@@ -1709,26 +1714,27 @@ static PW_CODE eap_teap_process_tlvs(REQUEST *request, eap_handler_t *eap_sessio
 				 *	aren't needed by the inner-tunnel virtual server.
 				 */
 			case EAP_TEAP_TLV_RESULT:
-				gotresult = true;
 				if (vp->vp_short != EAP_TEAP_TLV_RESULT_SUCCESS) {
 					REDEBUG("Phase 2: Peer sent Result = Failure - rejecting the session");
 					code = PW_CODE_ACCESS_REJECT;
+				} else {
+					gotresult = true;
 				}
 				break;
 
 			case EAP_TEAP_TLV_INTERMED_RESULT:
-				gotintermedresult = true;
 				if (vp->vp_short != EAP_TEAP_TLV_RESULT_SUCCESS) {
 					REDEBUG("Phase 2: Peer sent Intermediate-Result = Failure - rejecting the session");
 					code = PW_CODE_ACCESS_REJECT;
+				} else {
+					gotintermedresult = true;
 				}
 				break;
 
 			case EAP_TEAP_TLV_CRYPTO_BINDING:
-				gotcryptobinding = true;
-
 				code = eap_teap_validate_crypto_binding(request, eap_session, tls_session,
 									(eap_tlv_crypto_binding_tlv_t const *)vp->vp_octets);
+				gotcryptobinding = (code == PW_CODE_ACCESS_ACCEPT);
 				break;
 
 			default:
