@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
 				if (strcmp(optarg, "stdout") == 0) {
 					goto do_stdout;
 				}
-				main_config.log_file = strdup(optarg);
+				main_config.log_file = talloc_strdup(autofree, optarg);
 				default_log.dst = L_DST_FILES;
 				default_log.fd = open(main_config.log_file,
 							    O_WRONLY | O_APPEND | O_CREAT, 0640);
@@ -220,9 +220,10 @@ int main(int argc, char *argv[])
 			case 'p':
 			{
 				unsigned long port;
+				char *end;
 
-				port = strtoul(optarg, 0, 10);
-				if ((port == 0) || (port > UINT16_MAX)) {
+				port = strtoul(optarg, &end, 10);
+				if ((port == 0) || (port > UINT16_MAX) || !*end) {
 					fprintf(stderr, "%s: Invalid port number \"%s\"\n",
 						main_config.name, optarg);
 					exit(EXIT_FAILURE);
