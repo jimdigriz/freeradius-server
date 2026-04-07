@@ -338,7 +338,7 @@ void radius_update_listener(rad_listen_t *this)
 	/*
 	 *	If it's already in the list, don't add it again.
 	 */
-	if (this->next) {
+	if (this->fd_updating) {
 		FD_MUTEX_UNLOCK(&fd_mutex);
 		return;
 	}
@@ -348,6 +348,7 @@ void radius_update_listener(rad_listen_t *this)
 	 */
 	this->next = new_listeners;
 	new_listeners = this;
+	this->fd_updating = true;
 	FD_MUTEX_UNLOCK(&fd_mutex);
 	radius_signal_self(RADIUS_SIGNAL_SELF_NEW_FD);
 }
@@ -4654,8 +4655,11 @@ static int eol_home_listener(UNUSED void *ctx, void *data)
 	this->status = RAD_LISTEN_STATUS_EOL;
 
 	FD_MUTEX_LOCK(&fd_mutex);
-	this->next = new_listeners;
-	new_listeners = this;
+	if (!this->fd_updating) {
+		this->next = new_listeners;
+		this->fd_updating = true;
+		new_listeners = this;
+	}
 	FD_MUTEX_UNLOCK(&fd_mutex);
 
 	return 1;		/* alway delete from this tree */
@@ -6496,6 +6500,7 @@ static void handle_signal_self(int flag)
 		for (this = new_listeners; this != NULL; this = next) {
 			next = this->next;
 			this->next = NULL;
+			this->fd_updating = false;
 
 			event_new_fd(this);
 		}

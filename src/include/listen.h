@@ -62,6 +62,7 @@ typedef int (*rad_listen_decode_t)(rad_listen_t *, REQUEST *);
 
 struct rad_listen {
 	rad_listen_t *next; /* should be rbtree stuff */
+	bool	     fd_updating;
 
 	/*
 	 *	For normal sockets.
