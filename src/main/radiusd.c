@@ -223,7 +223,7 @@ int main(int argc, char *argv[])
 				char *end;
 
 				port = strtoul(optarg, &end, 10);
-				if ((port == 0) || (port > UINT16_MAX) || !*end) {
+				if ((port == 0) || (port > UINT16_MAX) || *end) {
 					fprintf(stderr, "%s: Invalid port number \"%s\"\n",
 						main_config.name, optarg);
 					exit(EXIT_FAILURE);
