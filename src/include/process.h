@@ -53,6 +53,7 @@ typedef enum fr_state_action_t {	/* server action */
 	FR_ACTION_CLEANUP_DELAY,
 	FR_ACTION_COA_CANCELLED,
 } fr_state_action_t;
+#define FR_ACTION_MAX (FR_ACTION_COA_CANCELLED + 1)
 
 /*
  *  Function handler for requests.

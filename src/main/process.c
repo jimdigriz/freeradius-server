@@ -131,6 +131,8 @@ static NEVER_RETURNS void _rad_panic(char const *file, unsigned int line, char c
 
 #define rad_panic(x) _rad_panic(__FILE__, __LINE__, x)
 
+#define LIMIT_DELAY if (request->delay > 30 * USEC) request->delay = 30 * USEC
+
 /** Declare a state in the state machine
  *
  * Expands to the start of a function definition for a given state.
@@ -869,7 +871,7 @@ void request_done(REQUEST *request, int original)
 		if (request->delay < (USEC / 3)) request->delay = USEC / 3;
 		tv_add(&when, request->delay);
 		request->delay += request->delay >> 1;
-		if (request->delay > (10 * USEC)) request->delay = 10 * USEC;
+		LIMIT_DELAY;
 
 		STATE_MACHINE_TIMER;
 		return;
@@ -901,7 +903,7 @@ void request_done(REQUEST *request, int original)
 	request_stats_final(request);
 #ifdef WITH_TCP
 	if (request->listener) {
-		request->listener->count--;
+		if (request->listener->count) request->listener->count--;
 
 		/*
 		 *	If we're the last one, remove the listener now.
@@ -962,7 +964,11 @@ static void request_cleanup_delay_init(REQUEST *request)
 	rad_assert(request->reply->timestamp.tv_sec != 0);
 	when = request->reply->timestamp;
 
+	/*
+	 *	cleanup_delay is capped at 30 by main_config.c
+	 */
 	request->delay = request->root->cleanup_delay * USEC;
+	LIMIT_DELAY;
 	when.tv_sec += request->root->cleanup_delay;
 
 	/*
@@ -1076,6 +1082,7 @@ static bool request_max_time(REQUEST *request)
 	when = now;
 	tv_add(&when, request->delay);
 	request->delay += request->delay >> 1;
+	LIMIT_DELAY;
 	STATE_MACHINE_TIMER;
 	return false;
 }
@@ -1120,6 +1127,7 @@ static void request_queue_or_run(REQUEST *request,
 		gettimeofday(&when, NULL);
 		tv_add(&when, request->delay);
 		request->delay += request->delay >> 1;
+		LIMIT_DELAY;
 
 		STATE_MACHINE_TIMER;
 
@@ -1260,7 +1268,7 @@ static void request_cleanup_delay(REQUEST *request, int action)
 		 */
 		when = request->reply->timestamp;
 		request->delay += request->delay;
-		if (request->delay > (30 * USEC)) request->delay = 30 * USEC;
+		LIMIT_DELAY;
 		tv_add(&when, request->delay);
 
 		STATE_MACHINE_TIMER;
@@ -2484,7 +2492,7 @@ static void remove_from_proxy_hash_nl(REQUEST *request, bool yank)
 	}
 
 	if (request->proxy_listener) {
-		request->proxy_listener->count--;
+		if (request->proxy_listener->count) request->proxy_listener->count--;
 
 #ifdef WITH_COA_TUNNEL
 		/*
@@ -2510,12 +2518,6 @@ static void remove_from_proxy_hash_nl(REQUEST *request, bool yank)
 static void remove_from_proxy_hash(REQUEST *request)
 {
 	VERIFY_REQUEST(request);
-
-	/*
-	 *	Check this without grabbing the mutex because it's a
-	 *	lot faster that way.
-	 */
-	if (!request->in_proxy_hash) return;
 
 	/*
 	 *	The "not in hash" flag is definitive.  However, if the
@@ -2896,7 +2898,7 @@ static int process_proxy_reply(REQUEST *request, RADIUS_PACKET *reply, uint32_t 
 	/*
 	 *	Run the request through the given virtual server.
 	 */
-	RDEBUG2("server %s {", request->server);
+	RDEBUG2("server %s {", request->server ? request->server : "");
 	RINDENT();
 	rcode = process_post_proxy(post_proxy_type, request);
 	REXDENT();
@@ -3959,7 +3961,7 @@ add_proxy_state:
 	/*
 	 *	Run the request through the given virtual server.
 	 */
-	RDEBUG2("server %s {", request->server);
+	RDEBUG2("server %s {", request->server ? request->server : "");
 	RINDENT();
 	rcode = process_pre_proxy(pre_proxy_type, request);
 	REXDENT();
@@ -5213,7 +5215,7 @@ set_packet_type:
 	 *	home server, OR through the virtual server for the
 	 *	home server pool.
 	 */
-	old_server = request->server;
+	old_server = coa->server;
 	if (coa->home_server && coa->home_server->virtual_server) {
 		coa->server = coa->home_server->virtual_server;
 
@@ -5290,7 +5292,7 @@ set_packet_type:
 
 #ifdef DEBUG_STATE_MACHINE
 	if (rad_debug_lvl) printf("(%u) ********\tSTATE %s C-%s -> C-%s\t********\n", request->number, __FUNCTION__,
-			       child_state_names[request->child_state],
+			       child_state_names[coa->child_state],
 			       child_state_names[REQUEST_PROXIED]);
 #endif
 
@@ -5350,10 +5352,13 @@ static void coa_retransmit(REQUEST *request)
 		 */
 		delay = (fr_rand() & ((1 << 22) - 1)) / 10;
 		request->delay = delay * request->home_server->coa_irt;
+		LIMIT_DELAY;
 		delay = request->home_server->coa_irt * USEC;
 		delay -= delay / 10;
 		delay += request->delay;
 		request->delay = delay;
+		LIMIT_DELAY;
+		delay = request->delay;
 
 		when = request->proxy->timestamp;
 		tv_add(&when, delay);
@@ -5422,6 +5427,7 @@ static void coa_retransmit(REQUEST *request)
 	}
 
 	request->delay = delay;
+	LIMIT_DELAY;
 	when = now;
 	tv_add(&when, request->delay);
 	mrd = request->proxy->timestamp;
@@ -5559,6 +5565,7 @@ static bool coa_max_time(REQUEST *request)
 	when = now;
 	tv_add(&when, request->delay);
 	request->delay += request->delay >> 1;
+	LIMIT_DELAY;
 	STATE_MACHINE_TIMER;
 	return false;
 }
@@ -5604,8 +5611,7 @@ static void coa_wait_for_reply(REQUEST *request, int action)
 		 *	Reset the initial delay for checking if we
 		 *	should still run.
 		 */
-		request->delay = (int)request->root->init_delay.tv_sec * USEC +
-			(int)request->root->init_delay.tv_usec;
+		request->delay = request->root->init_delay.tv_usec;
 
 		ASSERT_MASTER;
 		request_queue_or_run(request, coa_running); /* network thread - timer */
@@ -6543,28 +6549,13 @@ static int self_pipe[2] = { -1, -1 };
  */
 void radius_signal_self(int flag)
 {
-	ssize_t rcode;
-	uint8_t buffer[16];
+	uint8_t buffer[1];
 
 	if (flag == RADIUS_SIGNAL_SELF_TERM) {
 		main_config.exiting = true;
 	}
 
-	/*
-	 *	The read MUST be non-blocking for this to work.
-	 */
-	rcode = read(self_pipe[0], buffer, sizeof(buffer));
-	if (rcode > 0) {
-		ssize_t i;
-
-		for (i = 1; i < rcode; i++) {
-			buffer[0] |= buffer[i];
-		}
-	} else {
-		buffer[0] = 0;
-	}
-
-	buffer[0] |= flag;
+	buffer[0] = flag;
 
 	if (write(self_pipe[1], buffer, 1) < 0) fr_exit(0);
 }
