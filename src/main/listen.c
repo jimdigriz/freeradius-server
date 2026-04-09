@@ -437,7 +437,7 @@ int rad_status_server(REQUEST *request)
 				request->reply->code = PW_CODE_ACCESS_REJECT;
 
 				rad_free(&sock->packet);
-				TALLOC_FREE(sock->request);
+				TLS_FREE(sock->request);
 				listener->status = RAD_LISTEN_STATUS_EOL;
 				listener->tls = NULL; /* parent owns this! */
 			}
@@ -745,7 +745,7 @@ static int dual_tcp_recv(rad_listen_t *listener)
 
 	if (rcode < 0) {	/* error or connection reset */
 		rad_free(&sock->packet);
-		TALLOC_FREE(sock->request);
+		TLS_FREE(sock->request);
 		listener->status = RAD_LISTEN_STATUS_EOL;
 
 		/*
