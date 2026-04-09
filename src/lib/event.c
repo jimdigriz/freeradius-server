@@ -488,13 +488,13 @@ int fr_event_fd_write_handler(fr_event_list_t *el, int type, int fd,
 		 *	Tell us when the socket is ready for writing
 		 */
 		if (write_handler) {
-			fr_assert(!el->readers[j].write_handler);
+			if (el->readers[j].write_handler == write_handler) return 1;
 
 			el->readers[j].write_handler = write_handler;
 
 			EV_SET(&evset, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, &el->readers[j]);
 		} else {
-			fr_assert(el->readers[j].write_handler);
+			if (!el->readers[j].write_handler) return 1;
 
 			el->readers[j].write_handler = NULL;
 
