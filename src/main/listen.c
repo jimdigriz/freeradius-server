@@ -381,6 +381,12 @@ static int listen_bind(rad_listen_t *this);
 static void listener_coa_update(rad_listen_t *this, VALUE_PAIR *vps);
 #endif
 
+#ifdef WITH_TLS
+#  define TLS_FREE(_x) TALLOC_FREE(_x)
+#else
+#  define TLS_FREE(_x)
+#endif
+
 /*
  *	Process and reply to a server-status request.
  *	Like rad_authenticate and rad_accounting this should
@@ -2745,7 +2751,7 @@ static int proxy_socket_tcp_recv(rad_listen_t *listener)
 		      packet->src_port);
 
 		rad_free(&sock->packet);
-		TALLOC_FREE(sock->request);
+		TLS_FREE(sock->request);
 		listener->status = RAD_LISTEN_STATUS_EOL;
 		radius_update_listener(listener);
 
