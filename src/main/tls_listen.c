@@ -71,12 +71,15 @@ static void dump_hex(char const *msg, uint8_t const *data, size_t data_len)
 	fflush(stdout);
 }
 
+/*
+ *	Called with the mutex held.
+ */
 static void tls_socket_close(rad_listen_t *listener)
 {
 	listen_socket_t *sock = listener->data;
 	REQUEST *request = sock->request;
 
-	if (!sock->client_closed) SSL_shutdown(sock->ssn->ssl);
+	if (!sock->client_closed && sock->ssn) SSL_shutdown(sock->ssn->ssl);
 
 	listener->status = RAD_LISTEN_STATUS_EOL;
 	listener->tls = NULL; /* parent owns this! */
@@ -85,6 +88,8 @@ static void tls_socket_close(rad_listen_t *listener)
 	 *	Tell the event handler that an FD has disappeared.
 	 */
 	ROPTIONAL(RDEBUG3, DEBUG3, "(TLS) Closing connection");
+	rad_free(&sock->packet);
+	TALLOC_FREE(sock->request);
 	radius_update_listener(listener);
 
 	/*
@@ -99,6 +104,9 @@ static void tls_socket_close(rad_listen_t *listener)
 
 static void tls_write_available(fr_event_list_t *el, int sock, void *ctx);
 
+/*
+ *	This function is called with the sock->mutex locked.
+ */
 static int CC_HINT(nonnull) tls_socket_write(rad_listen_t *listener)
 {
 	ssize_t rcode;
@@ -128,7 +136,6 @@ static int CC_HINT(nonnull) tls_socket_write(rad_listen_t *listener)
 
 
 		ERROR("(TLS) Error writing to socket: %s", fr_syserror(errno));
-		tls_socket_close(listener);
 		return -1;
 	}
 
@@ -165,9 +172,13 @@ static void tls_write_available(UNUSED fr_event_list_t *el, UNUSED int fd, void 
 	if (!sock->ssn->connected) {
 		int rcode;
 
+		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		rcode = try_connect(listener);
+		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		if (rcode <= 0) {
-			tls_socket_close(listener);
+			PTHREAD_MUTEX_LOCK(&sock->mutex);
+			tls_socket_close(listener);	
+			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			return;
 		}
 
@@ -179,7 +190,9 @@ static void tls_write_available(UNUSED fr_event_list_t *el, UNUSED int fd, void 
 	proxy_listener_thaw(listener);
 
 	PTHREAD_MUTEX_LOCK(&sock->mutex);
-	if (sock->ssn->dirty_out.used) (void) tls_socket_write(listener);
+	if (sock->ssn->dirty_out.used && (tls_socket_write(listener) < 0)) {
+		tls_socket_close(listener);
+	}
 	PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 }
 
@@ -390,6 +403,9 @@ static int proxy_protocol_check(rad_listen_t *listener, REQUEST *request)
 	return 1;
 }
 
+/*
+ *	Called without the mutex.
+ */
 static int tls_socket_recv(rad_listen_t *listener)
 {
 	bool doing_init = false, already_read = false;
@@ -402,7 +418,7 @@ static int tls_socket_recv(rad_listen_t *listener)
 
 	if (!sock->packet) {
 		sock->packet = rad_alloc(sock, false);
-		if (!sock->packet) return 0;
+		if (!sock->packet) return -1;
 
 		sock->packet->sockfd = listener->fd;
 		sock->packet->src_ipaddr = sock->other_ipaddr;
@@ -420,7 +436,7 @@ static int tls_socket_recv(rad_listen_t *listener)
 		sock->request = request = request_alloc(sock);
 		if (!sock->request) {
 			ERROR("Out of memory");
-			return 0;
+			return -1;
 		}
 
 		rad_assert(request->packet == NULL);
@@ -430,17 +446,13 @@ static int tls_socket_recv(rad_listen_t *listener)
 		request->component = "<tls-connect>";
 
 		request->reply = rad_alloc(request, false);
-		if (!request->reply) return 0;
+		if (!request->reply) return -1;
 
 		rad_assert(sock->ssn == NULL);
 
 		sock->ssn = tls_new_session(sock, listener->tls, sock->request,
 					    listener->tls->require_client_cert, true);
-		if (!sock->ssn) {
-			TALLOC_FREE(sock->request);
-			sock->packet = NULL;
-			return 0;
-		}
+		if (!sock->ssn) return -1;
 
 		SSL_set_ex_data(sock->ssn->ssl, FR_TLS_EX_INDEX_REQUEST, (void *)request);
 		SSL_set_ex_data(sock->ssn->ssl, fr_tls_ex_index_certs, (void *) &sock->certs);
@@ -469,8 +481,7 @@ static int tls_socket_recv(rad_listen_t *listener)
 		rcode = proxy_protocol_check(listener, request);
 		if (rcode < 0) {
 			RDEBUG("(TLS) Closing PROXY TLS socket from client port %u", sock->other_port);
-			tls_socket_close(listener);
-			return 0;
+			return -1;
 		}
 		if (rcode == 0) return 1;
 
@@ -522,11 +533,10 @@ static int tls_socket_recv(rad_listen_t *listener)
 			     sock->ssn->dirty_in.data,
 			     sizeof(sock->ssn->dirty_in.data));
 		if ((rcode < 0) && (errno == ECONNRESET)) {
-		do_close:
-			RDEBUG("(TLS) Closing socket from client port %u", sock->other_port);
-			tls_socket_close(listener);
+		do_close:	
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
-			return 0;
+			DEBUG("(TLS) Closing socket from client port %u", sock->other_port);
+			return -1;
 		}
 
 		if (rcode < 0) {
@@ -571,7 +581,7 @@ check_for_setup:
 		 */
 		if (sock->ssn->dirty_out.used > 0) {
 			RDEBUG3("(TLS) Writing to socket %d", listener->fd);
-			tls_socket_write(listener);
+			if (tls_socket_write(listener) < 0) goto do_close;
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			return 0;
 		}
@@ -639,10 +649,9 @@ get_application_data:
 	 */
 	if (sock->ssn->dirty_out.used > 0) {
 		RDEBUG3("(TLS) Writing to socket %d", listener->fd);
-		rcode = tls_socket_write(listener);
-		if (rcode < 0) {
+		if (tls_socket_write(listener) < 0) {
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
-			return rcode;
+			return -1;
 		}
 	}
 
@@ -653,10 +662,9 @@ get_application_data:
 	 *	Some kind of failure.  Close the socket.
 	 */
 	if (status == FR_TLS_FAIL) {
-		DEBUG("(TLS) Unable to recover from TLS error, closing socket from client port %u", sock->other_port);
-		tls_socket_close(listener);
+		DEBUG("(TLS) Unable to recover from TLS error, closing socket from client port %u", sock->other_port);		
 		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
-		return 0;
+		return -1;
 	}
 
 	if (status == FR_TLS_MORE_FRAGMENTS) {
@@ -720,10 +728,7 @@ read_application_data:
 	if (!rad_packet_ok(packet, 0, NULL)) {
 		if (DEBUG_ENABLED) ERROR("Receive - %s", fr_strerror());
 		DEBUG("(TLS) Closing TLS socket from client");
-		PTHREAD_MUTEX_LOCK(&sock->mutex);
-		tls_socket_close(listener);
-		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
-		return 0;	/* do_close unlocks the mutex */
+		return -1;
 	}
 
 	/*
@@ -764,12 +769,22 @@ int dual_tls_recv(rad_listen_t *listener)
 #ifdef WITH_COA_TUNNEL
 	bool		is_reply = false;
 #endif
+	int		rcode;
 
 	if (listener->status != RAD_LISTEN_STATUS_KNOWN) return 0;
 
 redo:
-	if (!tls_socket_recv(listener)) {
-		return 0;
+	rcode = tls_socket_recv(listener);
+	if (rcode == 0) return 0;
+
+	/*
+	 *	Close the socket if an error occured.
+	 */
+	if (rcode < 0) {
+		PTHREAD_MUTEX_LOCK(&sock->mutex);
+		tls_socket_close(listener);
+		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
+		return -1;
 	}
 
 	rad_assert(sock->packet != NULL);
@@ -883,8 +898,11 @@ redo:
 	rbio = SSL_get_rbio(sock->ssn->ssl);
 	if (BIO_ctrl_pending(rbio)) {
 		char buf[1];
-		int peek = SSL_peek(sock->ssn->ssl, buf, 1);
+		int peek;
 
+		PTHREAD_MUTEX_LOCK(&sock->mutex);
+		peek = SSL_peek(sock->ssn->ssl, buf, 1);
+		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		if (peek > 0) {
 			DEBUG("(TLS) more TLS records after dual_tls_recv");
 			goto redo;
@@ -1141,7 +1159,9 @@ static ssize_t proxy_tls_read(rad_listen_t *listener)
 	listen_socket_t *sock = listener->data;
 
 	if (!sock->ssn->connected) {
+		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		rcode = try_connect(listener);
+		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		if (rcode <= 0) return rcode;
 
 		if (rcode == 2) return 0; /* more negotiation needed */
@@ -1309,6 +1329,7 @@ int proxy_tls_recv(rad_listen_t *listener)
 	PTHREAD_MUTEX_LOCK(&sock->mutex);
 	data_len = proxy_tls_read(listener);
 	if (data_len < 0) {
+	fail:
 		tls_socket_close(listener);
 		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		DEBUG("(TLS) Closing connection to home server");
@@ -1324,6 +1345,10 @@ int proxy_tls_recv(rad_listen_t *listener)
 	data = sock->data;
 
 	packet = rad_alloc(sock, false);
+	if (!packet) {
+		PTHREAD_MUTEX_LOCK(&sock->mutex);
+		goto fail;
+	}
 	packet->sockfd = listener->fd;
 	packet->src_ipaddr = sock->other_ipaddr;
 	packet->src_port = sock->other_port;
@@ -1447,9 +1472,10 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		rcode = try_connect(listener);
 		if (rcode <= 0) {
+		do_close:
 			tls_socket_close(listener);
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
-			return rcode;
+			return -1;
 		}
 		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 
@@ -1460,14 +1486,11 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 		 *	later code writes the packet to the
 		 *	connection.
 		 */
-		if (rcode == 2) {
+		if (rcode == 2) {	
 			PTHREAD_MUTEX_LOCK(&sock->mutex);
-			if ((sock->ssn->clean_out.used + request->proxy->data_len) > MAX_RECORD_SIZE) {
-				PTHREAD_MUTEX_UNLOCK(&sock->mutex);
+			if ((sock->ssn->clean_out.used + request->proxy->data_len) > MAX_RECORD_SIZE) {		
 				RERROR("(TLS) Too much data buffered during SSL_connect()");
-				listener->status = RAD_LISTEN_STATUS_EOL;
-				radius_update_listener(listener);
-				return -1;
+				goto do_close;
 			}
 
 			RDEBUG3("(TLS) has %zu bytes in the buffer", sock->ssn->clean_out.used);
@@ -1482,9 +1505,8 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 
 #ifdef WITH_RADIUSV11
 		if (!sock->alpn_checked && (fr_radiusv11_client_get_alpn(listener) < 0)) {
-			listener->status = RAD_LISTEN_STATUS_EOL;
-			radius_update_listener(listener);
-			return -1;
+			PTHREAD_MUTEX_LOCK(&sock->mutex);
+			goto do_close;
 		}
 #endif
 	}
@@ -1498,11 +1520,8 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 	 */
 	if (sock->ssn->clean_out.used > 0) {
 		if ((sock->ssn->clean_out.used + request->proxy->data_len) > MAX_RECORD_SIZE) {
-			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			RERROR("(TLS) Too much data buffered after SSL_connect()");
-			listener->status = RAD_LISTEN_STATUS_EOL;
-			radius_update_listener(listener);
-			return -1;
+			goto do_close;
 		}
 
 		/*
@@ -1551,9 +1570,7 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 		default:
 			tls_error_log(NULL, "Failed in proxy send with OpenSSL error %d", err);
 			DEBUG("(TLS) Closing socket to home server");
-			tls_socket_close(listener);
-			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
-			return 0;
+			goto do_close;
 		}
 	}
 	PTHREAD_MUTEX_UNLOCK(&sock->mutex);

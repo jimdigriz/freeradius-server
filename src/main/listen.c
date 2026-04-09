@@ -77,6 +77,13 @@ static void print_packet(RADIUS_PACKET *packet)
 }
 #endif
 
+#ifdef HAVE_PTHREAD_H
+#define PTHREAD_MUTEX_LOCK pthread_mutex_lock
+#define PTHREAD_MUTEX_UNLOCK pthread_mutex_unlock
+#else
+#define PTHREAD_MUTEX_LOCK(_x)
+#define PTHREAD_MUTEX_UNLOCK(_x)
+#endif
 
 static rad_listen_t *listen_alloc(TALLOC_CTX *ctx, RAD_LISTEN_TYPE type);
 
@@ -388,6 +395,7 @@ int rad_status_server(REQUEST *request)
 	if (request->listener->tls) {
 		listen_socket_t *sock = request->listener->data;
 
+		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		if (sock->state == LISTEN_TLS_CHECKING) {
 			int autz_type = PW_AUTZ_TYPE;
 			char const *name = "Autz-Type";
@@ -422,10 +430,13 @@ int rad_status_server(REQUEST *request)
 				RWDEBUG("(TLS) Connection is not authorized - closing TCP socket.");
 				request->reply->code = PW_CODE_ACCESS_REJECT;
 
+				rad_free(&sock->packet);
+				TALLOC_FREE(sock->request);
 				listener->status = RAD_LISTEN_STATUS_EOL;
 				listener->tls = NULL; /* parent owns this! */
 			}
 
+			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			radius_update_listener(listener);
 			return 0;
 		}
@@ -727,6 +738,8 @@ static int dual_tcp_recv(rad_listen_t *listener)
 	}
 
 	if (rcode < 0) {	/* error or connection reset */
+		rad_free(&sock->packet);
+		TALLOC_FREE(sock->request);
 		listener->status = RAD_LISTEN_STATUS_EOL;
 
 		/*
@@ -2014,6 +2027,9 @@ static int common_socket_send(rad_listen_t *listener, REQUEST *request)
 	}
 #endif
 
+	/*
+	 *	@todo - mutex lock on TCP writes.  We already do this for TLS.
+	 */
 	if (rad_send(request->reply, request->packet,
 		     request->client->secret) < 0) {
 		RERROR("Failed sending reply: %s",
@@ -2721,8 +2737,6 @@ static int proxy_socket_tcp_recv(rad_listen_t *listener)
 	}
 
 	if (rcode < 0) {	/* error or connection reset */
-		listener->status = RAD_LISTEN_STATUS_EOL;
-
 		/*
 		 *	Tell the event handler that an FD has disappeared.
 		 */
@@ -2730,6 +2744,9 @@ static int proxy_socket_tcp_recv(rad_listen_t *listener)
 		      ip_ntoh(&packet->src_ipaddr, buffer, sizeof(buffer)),
 		      packet->src_port);
 
+		rad_free(&sock->packet);
+		TALLOC_FREE(sock->request);
+		listener->status = RAD_LISTEN_STATUS_EOL;
 		radius_update_listener(listener);
 
 		/*
