@@ -896,6 +896,13 @@ static int mod_bootstrap(CONF_SECTION *conf, void *instance)
 	inst->xlat_name = cf_section_name2(conf);
 	if (!inst->xlat_name) inst->xlat_name = cf_section_name1(conf);
 
+#ifdef CURLOPT_ABSTRACT_UNIX_SOCKET
+	if (inst->connect_uri_socket_abstract) {
+		cf_log_err_cs(conf, "connect_uri_socket_abstract is not supported on this platform");
+		return -1;
+	}
+#endif
+
 	/*
 	 *	Register the rest xlat function
 	 */
