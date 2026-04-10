@@ -177,7 +177,7 @@ static void tls_write_available(UNUSED fr_event_list_t *el, UNUSED int fd, void 
 		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		if (rcode <= 0) {
 			PTHREAD_MUTEX_LOCK(&sock->mutex);
-			tls_socket_close(listener);	
+			tls_socket_close(listener);
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			return;
 		}
@@ -533,7 +533,7 @@ static int tls_socket_recv(rad_listen_t *listener)
 			     sock->ssn->dirty_in.data,
 			     sizeof(sock->ssn->dirty_in.data));
 		if ((rcode < 0) && (errno == ECONNRESET)) {
-		do_close:	
+		do_close:
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			DEBUG("(TLS) Closing socket from client port %u", sock->other_port);
 			return -1;
@@ -662,7 +662,7 @@ get_application_data:
 	 *	Some kind of failure.  Close the socket.
 	 */
 	if (status == FR_TLS_FAIL) {
-		DEBUG("(TLS) Unable to recover from TLS error, closing socket from client port %u", sock->other_port);		
+		DEBUG("(TLS) Unable to recover from TLS error, closing socket from client port %u", sock->other_port);
 		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		return -1;
 	}
@@ -1484,9 +1484,9 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 		 *	later code writes the packet to the
 		 *	connection.
 		 */
-		if (rcode == 2) {	
+		if (rcode == 2) {
 			PTHREAD_MUTEX_LOCK(&sock->mutex);
-			if ((sock->ssn->clean_out.used + request->proxy->data_len) > MAX_RECORD_SIZE) {		
+			if ((sock->ssn->clean_out.used + request->proxy->data_len) > MAX_RECORD_SIZE) {
 				RERROR("(TLS) Too much data buffered during SSL_connect()");
 				goto do_close;
 			}
