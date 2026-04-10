@@ -1159,9 +1159,7 @@ static ssize_t proxy_tls_read(rad_listen_t *listener)
 	listen_socket_t *sock = listener->data;
 
 	if (!sock->ssn->connected) {
-		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		rcode = try_connect(listener);
-		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		if (rcode <= 0) return rcode;
 
 		if (rcode == 2) return 0; /* more negotiation needed */
