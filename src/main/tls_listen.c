@@ -169,27 +169,25 @@ static void tls_write_available(UNUSED fr_event_list_t *el, UNUSED int fd, void 
 	/*
 	 *	Try to connect once the socket has become writeable.
 	 */
+	PTHREAD_MUTEX_LOCK(&sock->mutex);
 	if (!sock->ssn->connected) {
 		int rcode;
 
-		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		rcode = try_connect(listener);
-		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		if (rcode <= 0) {
-			PTHREAD_MUTEX_LOCK(&sock->mutex);
 			tls_socket_close(listener);
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			return;
 		}
 
 		if (!sock->ssn->connected) {
+			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			return;
 		}
 	}
 
 	proxy_listener_thaw(listener);
 
-	PTHREAD_MUTEX_LOCK(&sock->mutex);
 	if (sock->ssn->dirty_out.used && (tls_socket_write(listener) < 0)) {
 		tls_socket_close(listener);
 	}
