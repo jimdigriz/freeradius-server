@@ -1343,10 +1343,7 @@ int proxy_tls_recv(rad_listen_t *listener)
 	data = sock->data;
 
 	packet = rad_alloc(sock, false);
-	if (!packet) {
-		PTHREAD_MUTEX_LOCK(&sock->mutex);
-		goto fail;
-	}
+	if (!packet) goto fail;
 
 	/*
 	 *	sock->data is the data that we read from the socket. It is ONLY one packet, and is read from
@@ -1474,9 +1471,9 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 	}
 
 	rad_assert(sock->ssn != NULL);
-
+	
+	PTHREAD_MUTEX_LOCK(&sock->mutex);
 	if (!sock->ssn->connected) {
-		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		rcode = try_connect(listener);
 		if (rcode <= 0) {
 		do_close:
@@ -1484,7 +1481,6 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 			PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 			return -1;
 		}
-		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 
 		/*
 		 *	More negotiation is needed, but remember to
@@ -1494,7 +1490,6 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 		 *	connection.
 		 */
 		if (rcode == 2) {
-			PTHREAD_MUTEX_LOCK(&sock->mutex);
 			if ((sock->ssn->clean_out.used + request->proxy->data_len) > MAX_RECORD_SIZE) {
 				RERROR("(TLS) Too much data buffered during SSL_connect()");
 				goto do_close;
@@ -1512,7 +1507,6 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 
 #ifdef WITH_RADIUSV11
 		if (!sock->alpn_checked && (fr_radiusv11_client_get_alpn(listener) < 0)) {
-			PTHREAD_MUTEX_LOCK(&sock->mutex);
 			goto do_close;
 		}
 #endif
@@ -1520,7 +1514,6 @@ int proxy_tls_send(rad_listen_t *listener, REQUEST *request)
 
 	DEBUG3("Proxy is writing %u bytes to SSL",
 	       (unsigned int) request->proxy->data_len);
-	PTHREAD_MUTEX_LOCK(&sock->mutex);
 
 	/*
 	 *	We may have previously cached data on SSL_connect(), which now needs to be written to the home server.
