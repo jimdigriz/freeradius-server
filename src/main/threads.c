@@ -679,6 +679,7 @@ retry:
 		} else {
 			request_done(request, REQUEST_DONE);
 		}
+		request = NULL;
 	}
 
 	/*

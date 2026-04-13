@@ -236,6 +236,7 @@ bool fr_atomic_queue_pop(fr_atomic_queue_t *aq, void **p_data)
 		 *	tail is smaller than the current entry, the queue is full.
 		 */
 		if (diff < 0) {
+			*p_data = NULL;
 			return false;
 		}
 
