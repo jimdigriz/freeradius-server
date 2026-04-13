@@ -1333,9 +1333,9 @@ int proxy_tls_recv(rad_listen_t *listener)
 		DEBUG("(TLS) Closing connection to home server");
 		return 0;
 	}
-	PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 
 	if (data_len == 0) {
+		PTHREAD_MUTEX_UNLOCK(&sock->mutex);
 		DEBUG3("(TLS) Proxy socket read no data from the network");
 		return 0; /* not done yet */
 	}
@@ -1347,6 +1347,17 @@ int proxy_tls_recv(rad_listen_t *listener)
 		PTHREAD_MUTEX_LOCK(&sock->mutex);
 		goto fail;
 	}
+
+	/*
+	 *	sock->data is the data that we read from the socket. It is ONLY one packet, and is read from
+	 *	the TLS session via SSL_read().  We are careful to read only the first 4 octets (to get the
+	 *	length), and then read only the length of the actual packet.
+	 */
+	packet->data_len = data_len;
+	packet->data = talloc_array(packet, uint8_t, packet->data_len);
+	memcpy(packet->data, data, packet->data_len);
+	PTHREAD_MUTEX_UNLOCK(&sock->mutex);
+
 	packet->sockfd = listener->fd;
 	packet->src_ipaddr = sock->other_ipaddr;
 	packet->src_port = sock->other_port;
@@ -1354,10 +1365,8 @@ int proxy_tls_recv(rad_listen_t *listener)
 	packet->dst_port = sock->my_port;
 	packet->code = data[0];
 	packet->id = data[1];
-	packet->data_len = data_len;
-	packet->data = talloc_array(packet, uint8_t, packet->data_len);
-	memcpy(packet->data, data, packet->data_len);
 	memcpy(packet->vector, packet->data + 4, 16);
+
 
 #ifdef WITH_RADIUSV11
 	packet->radiusv11 = sock->radiusv11;
