@@ -79,6 +79,7 @@ struct rad_listen {
 	bool		dual;
 	bool		proxy_protocol;		//!< haproxy protocol
 	bool		listen;			//! just calls listen()
+	bool		nonblock;
 #endif
 	bool		nodup;
 	bool		dead;
@@ -86,7 +87,6 @@ struct rad_listen {
 #ifdef WITH_TLS
 	fr_tls_server_conf_t *tls;
 	bool		check_client_connections;
-	bool		nonblock;
 	bool		blocked;
 #ifdef WITH_RADIUSV11
 	fr_radiusv11_t 	radiusv11;

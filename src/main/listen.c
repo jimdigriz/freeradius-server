@@ -1250,7 +1250,9 @@ static int dual_tcp_accept(rad_listen_t *listener)
 	memcpy(this, listener, sizeof(*this));
 	this->next = NULL;
 	this->data = sock;	/* fix it back */
+#ifdef WITH_TCP
 	this->nonblock = listener->nonblock;
+#endif
 
 	sock->parent = listener->data;
 	sock->other_ipaddr = src_ipaddr;
@@ -1374,6 +1376,7 @@ static int dual_tcp_accept(rad_listen_t *listener)
 	}
 #endif
 
+#ifdef WITH_TCP
 	/*
 	 *	Configure non-blocking sockets if requested.
 	 */
@@ -1399,6 +1402,7 @@ static int dual_tcp_accept(rad_listen_t *listener)
 			goto error;
 		}
 	}
+#endif
 #endif
 
 	/*
@@ -1741,12 +1745,6 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 			if (rcode < 0) return -1;
 
 			/*
-			 *	Allow non-blocking for TLS sockets
-			 */
-			rcode = cf_item_parse(cs, "nonblock", FR_ITEM_POINTER(PW_TYPE_BOOLEAN, &this->nonblock), NULL);
-			if (rcode < 0) return -1;
-
-			/*
 			 *	If unset, set to default.
 			 */
 			if (listen_port == 0) listen_port = PW_RADIUS_TLS_PORT;
@@ -1780,6 +1778,8 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 				this->radiusv11 = this->tls->radiusv11 = rcode;
 			}
 #endif
+
+			this->nonblock = true;
 		}
 #else  /* WITH_TLS */
 		/*
@@ -1791,6 +1791,18 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 			return -1;
 		}
 #endif	/* WITH_TLS */
+
+		/*
+		 *	Allow non-blocking for TCP sockets
+		 *
+		 *	For TLS, we always set nonblock=true, which avoids calling this section The check
+		 *	below just means that we don't have to have more ifdef's around checking for
+		 *	this->tls.
+		 */
+		if (!this->nonblock && (sock->proto == IPPROTO_TCP)) {
+			rcode = cf_item_parse(cs, "nonblock", FR_ITEM_POINTER(PW_TYPE_BOOLEAN, &this->nonblock), NULL);
+			if (rcode < 0) return -1;
+		}
 
 #endif	/* WITH_TCP */
 
