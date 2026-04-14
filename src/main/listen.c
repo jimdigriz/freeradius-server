@@ -1384,7 +1384,6 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		if (fr_nonblock(this->fd) < 0) {
 			ERROR("Failed setting non-blocking on socket: %s",
 			      fr_syserror(errno));
-		error:
 			close(this->fd);
 			return 0; /* do NOT close the parent socket! */
 		}
@@ -1399,7 +1398,8 @@ static int dual_tcp_accept(rad_listen_t *listener)
 
 		if (setsockopt(this->fd, SOL_TCP, TCP_NODELAY, &on, sizeof(on)) < 0) {
 			ERROR("(TLS) Failed to set TCP_NODELAY: %s", fr_syserror(errno));
-			goto error;
+			close(this->fd);
+			return 0; /* do NOT close the parent socket! */
 		}
 	}
 #endif
