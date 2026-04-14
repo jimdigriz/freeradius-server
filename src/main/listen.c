@@ -1250,6 +1250,7 @@ static int dual_tcp_accept(rad_listen_t *listener)
 	memcpy(this, listener, sizeof(*this));
 	this->next = NULL;
 	this->data = sock;	/* fix it back */
+	this->nonblock = listener->nonblock;
 
 	sock->parent = listener->data;
 	sock->other_ipaddr = src_ipaddr;
@@ -1300,6 +1301,7 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		if (this->tls) {
 			this->recv = dual_tls_recv;
 			this->send = dual_tls_send;
+			this->nonblock = true;
 
 			/*
 			 *	Set up SNI callback.  We don't do it
@@ -1373,9 +1375,31 @@ static int dual_tcp_accept(rad_listen_t *listener)
 #endif
 
 	/*
-	 *	FIXME: set O_NONBLOCK on the accept'd fd.
-	 *	See djb's portability rants for details.
+	 *	Configure non-blocking sockets if requested.
 	 */
+	if (this->nonblock) {
+		if (fr_nonblock(this->fd) < 0) {
+			ERROR("Failed setting non-blocking on socket: %s",
+			      fr_syserror(errno));
+		error:
+			close(this->fd);
+			return 0; /* do NOT close the parent socket! */
+		}
+	}
+
+#ifdef TCP_NODELAY
+	/*
+	 *	Also set TCP_NODELAY, to force the data to be written quickly.
+	 */
+	if (sock->proto == IPPROTO_TCP) {
+		int on = 1;
+
+		if (setsockopt(this->fd, SOL_TCP, TCP_NODELAY, &on, sizeof(on)) < 0) {
+			ERROR("(TLS) Failed to set TCP_NODELAY: %s", fr_syserror(errno));
+			goto error;
+		}
+	}
+#endif
 
 	/*
 	 *	Tell the event loop that we have a new FD.
@@ -3659,21 +3683,24 @@ rad_listen_t *proxy_new_listener(TALLOC_CTX *ctx, home_server_t *home, uint16_t 
 
 #ifdef WITH_TLS
 		this->nonblock |= home->nonblock;
+		this->nonblock |= (this->tls != NULL);		// TLS connections are always nonblocking.
 #endif
 
 		/*
-		 *	FIXME: connect() is blocking!
-		 *	We do this with the proxy mutex locked, which may
-		 *	cause large delays!
+		 *	connect() is blocking for TCP.  The administrator has to manually set "nonblock" in
+		 *	the configuration to make it non-blocking.
+		 *
+		 *	Due to the way that TLS works, TLS sockets are always non blocking.
+		 *
+		 *	FIXME: setting nonblock=true for TCP (not TLS) means that any subsequence read() will
+		 *	return ENOTCONN, and the reader has to call connect() again.  But doing this also
+		 *	means that we need to update fr_socket_client_tcp() to return a flag which indicates
+		 *	whether or not the connection attempt was successful.  And then we need to store that
+		 *	somewhere, etc.
 		 */
 		this->fd = fr_socket_client_tcp(&home->src_ipaddr,
 						&home->ipaddr, home->port,
-#ifdef WITH_TLS
-						this->nonblock
-#else
-						false
-#endif
-			);
+						this->nonblock);
 	} else
 #endif
 		this->fd = fr_socket(&home->src_ipaddr, src_port);
@@ -3734,7 +3761,7 @@ rad_listen_t *proxy_new_listener(TALLOC_CTX *ctx, home_server_t *home, uint16_t 
 			rad_assert(home->listeners != NULL);
 
 			if (!rbtree_insert(home->listeners, this)) {
-				ERROR("(TLS) Failed adding tracking informtion for proxy socket '%s'", buffer);
+				ERROR("(TLS) Failed adding tracking information for proxy socket '%s'", buffer);
 				goto error;
 			}
 
