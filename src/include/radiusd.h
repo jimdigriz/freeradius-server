@@ -32,6 +32,7 @@ RCSIDH(radiusd_h, "$Id$")
 #include <freeradius-devel/conffile.h>
 #include <freeradius-devel/event.h>
 #include <freeradius-devel/connection.h>
+#include <freeradius-devel/dlist.h>
 
 typedef struct rad_request REQUEST;
 
@@ -321,6 +322,7 @@ struct rad_request {
 	uint32_t		num_coa_requests;//!< Counter for number of requests sent including
 						//!< retransmits.
 #endif
+	fr_dlist_t		entry;		//!< for the free list
 };				/* REQUEST typedef */
 
 #define RAD_REQUEST_LVL_NONE	(0)		//!< No debug messages should be printed.

@@ -45,6 +45,11 @@ static inline void fr_dlist_entry_init(fr_dlist_t *entry)
 	entry->prev = entry->next = entry;
 }
 
+static inline bool fr_dlist_empty(fr_dlist_t *head)
+{
+	return ((head->prev == head) && (head->next == head));
+}
+
 static inline CC_HINT(nonnull) void fr_dlist_entry_unlink(fr_dlist_t *entry)
 {
 	entry->prev->next = entry->next;
@@ -58,6 +63,16 @@ static inline CC_HINT(nonnull) void fr_dlist_insert_tail(fr_dlist_t *head, fr_dl
 	entry->prev = head->prev;
 	head->prev->next = entry;
 	head->prev = entry;
+}
+
+static inline CC_HINT(nonnull) fr_dlist_t *fr_dlist_pop_head(fr_dlist_t *head)
+{
+	fr_dlist_t *entry = head->next;
+
+	if (entry == head) return NULL;
+
+	fr_dlist_entry_unlink(entry);
+	return entry;
 }
 
 #endif	/* RADIUS_DLIST_H */

@@ -505,7 +505,7 @@ int request_enqueue(REQUEST *request)
 
 	/*
 	 *	If there are too many packets _overall_, OR the
-	 *	destinatio fifo is full, then try to delete a lower
+	 *	destination fifo is full, then try to delete a lower
 	 *	priority one.
 	 */
 	if (((thread_pool.num_queued >= thread_pool.max_queue_size) &&
@@ -547,109 +547,18 @@ int request_enqueue(REQUEST *request)
 	return 1;
 }
 
-#ifndef HAVE_STDATOMIC_H
 /*
- *	Try to free up requests by discarding requests of lower priority.
+ *	Free a list of requests, WITHOUT holding the thread mutex.
  */
-static int request_fifo_discard(int priority, bool lower, time_t now)
+static void request_list_free(fr_dlist_t *head)
 {
-	int i, rcode;
-	REQUEST *request;
+	fr_dlist_t *entry;
 
-	if (lower) {
-		for (i = NUM_FIFOS - 1; i < priority; i--) {
-			request = fr_fifo_pop(thread_pool.fifo[i]);
-			if (!request) continue;
+	while ((entry = fr_dlist_pop_head(head)) != NULL) {
+		REQUEST *request;
 
-			fr_assert(request->child_state == REQUEST_QUEUED);
-			request->child_state = REQUEST_DONE;
-			request_done(request, FR_ACTION_DONE);
-			return 1;
-		}
-
-		/*
-		 *	We didn't discard a lower priority entry.
-		 *	Maybe we need to discard one of the current
-		 *	priority, which has been in the queue for a
-		 *	while.
-		 */
-	}
-
-	/*
-	 *	The time stamp for proxied requests may be 5-10
-	 *	seconds in the past, because the home server hasn't
-	 *	responded.  We therefore can't discard "old" requests,
-	 *	as they have just received a reply, or they have just
-	 *	timed out.
-	 */
-	if (priority <= RAD_LISTEN_PROXY) return 0;
-
-	/*
-	 *	Peek at the first entry in the fifo.  Note that there
-	 *	is not always a first entry.  This is because we're
-	 *	called if there are too many _total_ requests.
-	 */
-	rcode = 0;
-
-retry:
-	request = fr_fifo_peek(thread_pool.fifo[priority]);
-	if (!request) return rcode;
-
-	/*
-	 *	This request expires in the future.  We can't do anything.
-	 */
-	if ((request->timestamp + main_config.max_request_time) > now) return rcode;
-
-	request = fr_fifo_pop(thread_pool.fifo[priority]);
-	rad_assert(request != NULL);
-	VERIFY_REQUEST(request);
-
-	request->child_state = REQUEST_DONE;
-	if (request->master_state == REQUEST_TO_FREE) {
-		request_free(request);
-	} else {
-		request_done(request, REQUEST_DONE);
-	}
-	thread_pool.num_queued--;
-
-	/*
-	 *	We might as well delete as many old requests as possible.
-	 */
-	rcode = 1;
-	goto retry;
-}
-#endif
-
-/*
- *	Remove a request from the queue.
- */
-static int request_dequeue(REQUEST **prequest)
-{
-	time_t blocked;
-	static time_t last_complained = 0;
-	static time_t total_blocked = 0;
-	int num_blocked = 0;
-#ifndef HAVE_STDATOMIC_H
-	RAD_LISTEN_TYPE start;
-#endif
-	RAD_LISTEN_TYPE i;
-	REQUEST *request = NULL;
-	reap_children();
-
-	rad_assert(pool_initialized == true);
-
-#ifdef HAVE_STDATOMIC_H
-retry:
-	for (i = 0; i < NUM_FIFOS; i++) {
-		if (!fr_atomic_queue_pop(thread_pool.queue[i], (void **) &request)) continue;
-
-		rad_assert(request != NULL);
-
-		VERIFY_REQUEST(request);
-
-		if (request->master_state != REQUEST_STOP_PROCESSING) {
-			break;
-		}
+		request = (REQUEST *) (((uint8_t *) entry) - offsetof(REQUEST, entry));
+		rad_assert(request->magic == REQUEST_MAGIC);
 
 		/*
 		 *	This entry was marked to be stopped.  Acknowledge it.
@@ -679,14 +588,125 @@ retry:
 		} else {
 			request_done(request, REQUEST_DONE);
 		}
-		request = NULL;
+	}
+}
+
+#ifndef HAVE_STDATOMIC_H
+/*
+ *	Try to free up requests by discarding requests of lower priority.
+ */
+static int request_fifo_discard(int priority, bool lower, time_t now)
+{
+	int i, rcode = 0;
+	REQUEST *request;
+	fr_dlist_t free_list;
+
+	fr_dlist_entry_init(&free_list);
+
+	if (lower) {
+		for (i = NUM_FIFOS - 1; i < priority; i--) {
+			request = fr_fifo_pop(thread_pool.fifo[i]);
+			if (!request) continue;
+
+			fr_assert(request->child_state == REQUEST_QUEUED);
+
+			request->master_state = REQUEST_STOP_PROCESSING;
+			fr_dlist_insert_tail(&free_list, &request->entry);
+			rcode = 1;
+			break;
+		}
+
+		/*
+		 *	We didn't discard a lower priority entry.
+		 *	Maybe we need to discard one of the current
+		 *	priority, which has been in the queue for a
+		 *	while.
+		 */
 	}
 
 	/*
-	 *	Popping might fail.  If so, return.
+	 *	We didn't free a lower priority one, try to free one from the current priority.
+	 *
+	 *	We don't free proxied requests based on time, as the time stamp for proxied requests may be
+	 *	5-10 seconds in the past, because the home server hasn't responded.  We therefore can't
+	 *	discard "old" requests, as they have just received a reply, or they have just timed out.
 	 */
-	if (!request) return 0;
+	if (!rcode && (priority > RAD_LISTEN_PROXY)) {
+		while (true) {
+			request = fr_fifo_peek(thread_pool.fifo[priority]);
+			if (!request) break;
 
+
+			/*
+			 *	This request expires in the future.  We can't do anything.
+			 */
+			if ((request->timestamp + main_config.max_request_time) > now) break;
+
+			request = fr_fifo_pop(thread_pool.fifo[priority]);
+			rad_assert(request != NULL);
+			VERIFY_REQUEST(request);
+
+			request->master_state = REQUEST_STOP_PROCESSING;
+			fr_dlist_insert_tail(&free_list, &request->entry);
+			thread_pool.num_queued--;
+
+			/*
+			 *	We might as well delete as many old requests as possible.
+			 */
+			rcode = 1;
+		}
+	}
+
+	/*
+	 *	request_done() grabs a mutex.  So we unlock this one, to avoid nested mutexes.
+	 */
+	if (!fr_dlist_empty(&free_list)) {
+		pthread_mutex_unlock(&thread_pool.queue_mutex);
+		request_list_free(&free_list);
+		pthread_mutex_lock(&thread_pool.queue_mutex);
+	}
+
+	return rcode;
+}
+#endif
+
+/*
+ *	Remove a request from the queue.
+ */
+static int request_dequeue(REQUEST **prequest)
+{
+	time_t blocked;
+	static time_t last_complained = 0;
+	static time_t total_blocked = 0;
+	int num_blocked = 0;
+#ifndef HAVE_STDATOMIC_H
+	RAD_LISTEN_TYPE start;
+#endif
+	RAD_LISTEN_TYPE i;
+	REQUEST *request = NULL;
+	fr_dlist_t	free_list;
+
+	fr_dlist_entry_init(&free_list);
+
+	reap_children();
+
+	rad_assert(pool_initialized == true);
+
+#ifdef HAVE_STDATOMIC_H
+	for (i = 0; i < NUM_FIFOS; i++) {
+		if (!fr_atomic_queue_pop(thread_pool.queue[i], (void **) &request)) continue;
+
+		rad_assert(request != NULL);
+
+		VERIFY_REQUEST(request);
+
+		if (request->master_state != REQUEST_STOP_PROCESSING) {
+			break;
+		}
+
+		fr_dlist_insert_tail(&free_list, &request->entry);
+		request = NULL;
+	}
 #else
 	pthread_mutex_lock(&thread_pool.queue_mutex);
 
@@ -735,58 +755,59 @@ retry:
 		rad_assert(request != NULL);
 		VERIFY_REQUEST(request);
 
-		request->child_state = REQUEST_DONE;
-		if (request->master_state == REQUEST_TO_FREE) {
-			request_free(request);
-		} else {
-			request_done(request, REQUEST_DONE);
-		}
+		fr_dlist_insert_tail(&free_list, &request->entry);
 		thread_pool.num_queued--;
+		request = NULL;
 	}
 
 	start = 0;
- retry:
+
 	/*
-	 *	Pop results from the top of the queue
+	 *	Pop the first request by priority.
 	 */
 	for (i = start; i < NUM_FIFOS; i++) {
 		request = fr_fifo_pop(thread_pool.fifo[i]);
-		if (request) {
-			VERIFY_REQUEST(request);
-			start = i;
-			break;
+		if (!request) continue;
+
+		VERIFY_REQUEST(request);
+
+		rad_assert(thread_pool.num_queued > 0);
+		thread_pool.num_queued--;
+
+		if (request->master_state == REQUEST_STOP_PROCESSING) {
+			fr_dlist_insert_tail(&free_list, &request->entry);
+			request = NULL;
+			continue;
 		}
+
+		start = i;
+		break;
 	}
 
-	if (!request) {
-		pthread_mutex_unlock(&thread_pool.queue_mutex);
-		*prequest = NULL;
-		return 0;
-	}
+	if (request) thread_pool.active_threads++;
 
-	rad_assert(thread_pool.num_queued > 0);
-	thread_pool.num_queued--;
+	pthread_mutex_unlock(&thread_pool.queue_mutex);
 #endif	/* HAVE_STD_ATOMIC_H */
 
 	*prequest = request;
 
-	rad_assert(*prequest != NULL);
-	rad_assert(request->magic == REQUEST_MAGIC);
-
 	/*
-	 *	If the request has sat in the queue for too long,
-	 *	kill it.
-	 *
-	 *	The main clean-up code can't delete the request from
-	 *	the queue, and therefore won't clean it up until we
-	 *	have acknowledged it as "done".
+	 *	Clean up the free list, with all of the mutexes unlocked.  request_done() will grab another
+	 *	mutex to do its work, and we don't want to have nested mutexes.
 	 */
-	if (request->master_state == REQUEST_STOP_PROCESSING) {
-		request->module = "<done>";
-		request->child_state = REQUEST_DONE;
-		goto retry;
+	if (!fr_dlist_empty(&free_list)) {
+		request_list_free(&free_list);
 	}
 
+	/*
+	 *	We didn't find a live request in the list.  Return that.
+	 */
+	if (!request) {
+		return 0;
+	}
+
+	rad_assert(*prequest != NULL);
+	rad_assert(request->magic == REQUEST_MAGIC);
 	rad_assert(request->child_state == REQUEST_QUEUED);
 
 	request->component = "<core>";
@@ -798,8 +819,6 @@ retry:
 	 */
 #ifdef HAVE_STDATOMIC_H
 	CAS_INCR(thread_pool.active_threads);
-#else
-	thread_pool.active_threads++;
 #endif
 
 	blocked = time(NULL);
@@ -816,10 +835,6 @@ retry:
 		total_blocked = 0;
 		blocked = 0;
 	}
-
-#ifndef HAVE_STDATOMIC_H
-	pthread_mutex_unlock(&thread_pool.queue_mutex);
-#endif
 
 	if (blocked) {
 		ERROR("%d requests have been waiting in the processing queue for %d seconds.  Check that all databases are running properly!",
