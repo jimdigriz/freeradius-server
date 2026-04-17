@@ -52,6 +52,10 @@ RCSID("$Id$")
 #include <sys/stat.h>
 #endif
 
+#ifdef HAVE_KQUEUE
+#include <sys/select.h>
+#endif
+
 #ifdef WITH_TLS
 #include <netinet/tcp.h>
 
@@ -1140,6 +1144,14 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		DEBUG2(" ... failed to accept connection");
 		return -1;
 	}
+
+#ifndef HAVE_KQUEUE
+	if (newfd >= FD_SETSIZE) {
+		RATE_LIMIT(INFO("Ignoring new connection from client %s too many connections are open", client->shortname));
+		close(newfd);
+		return 0;
+	}
+#endif
 
 	if (!fr_sockaddr2ipaddr(&src, salen, &src_ipaddr, &src_port)) {
 		close(newfd);
@@ -3727,6 +3739,16 @@ rad_listen_t *proxy_new_listener(TALLOC_CTX *ctx, home_server_t *home, uint16_t 
 		return NULL;
 	}
 
+#ifndef HAVE_KQUEUE
+	if (this->fd >= FD_SETSIZE) {
+		this->print(this, buffer,sizeof(buffer));
+		ERROR("Failed opening new proxy socket '%s' : FD %d is larger than maximum %u",
+		      buffer, this->fd, FD_SETSIZE);
+		home->last_failed_open = now;
+		listen_free(&this);
+		return NULL;
+	}
+#endif
 
 #ifdef WITH_TCP
 #ifdef SO_KEEPALIVE

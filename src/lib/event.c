@@ -358,6 +358,13 @@ int fr_event_fd_insert(fr_event_list_t *el, int type, int fd,
 		return 0;
 	}
 
+#ifndef HAVE_KQUEUE
+	if (fd >= FD_SETSIZE) {
+		fr_strerror_printf("Too many file descriptors! (FD %i >= %u)", fd, FD_SETSIZE);
+		return 0;
+	}
+#endif
+
 	if (type != 0) {
 		fr_strerror_printf("Invalid type %i", type);
 		return 0;
@@ -409,15 +416,7 @@ int fr_event_fd_insert(fr_event_list_t *el, int type, int fd,
 
 #else  /* HAVE_KQUEUE */
 
-	/*
-	 *	select() has limits.
-	 */
-	if (fd > FD_SETSIZE) {
-		fprintf(stderr, "FD is larger than FD_SETSIZE");
-		return 0;
-	}
-
-	if (fd > fr_ev_max_fds) {
+	if (fd >= fr_ev_max_fds) {
 		fprintf(stderr, "FD is larger than MAX FDs");
 		return 0;
 	}

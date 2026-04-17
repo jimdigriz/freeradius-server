@@ -206,11 +206,11 @@ listen {
 	      #  We STRONGLY RECOMMEND that you set an idle timeout.
 	      #
 	      #  Systems with many incoming connections (500+) should
-	      #  set this value to a lower number.  There are only a
-	      #  limited number of usable file descriptors (usually
-	      #  1024) due to Posix API issues.  If many sockets are
-	      #  idle, it can prevent the server from opening new
-	      #  connections.
+	      #  set this value to a low number, such as "5".  There
+	      #  are only a limited number of usable file descriptors
+	      #  (usually 1024) due to Posix API issues.  If many
+	      #  sockets are idle, it can prevent the server from
+	      #  opening new connections.
 	      #
 	      idle_timeout = 900
 	}
