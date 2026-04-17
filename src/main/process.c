@@ -6500,15 +6500,21 @@ static void handle_signal_self(int flag)
 		FD_MUTEX_LOCK(&fd_mutex);
 
 		/*
-		 *	FIXME: unlock the mutex before calling
-		 *	event_new_fd()?
+		 *	event_new_fd() may do a lot of work.  So we
+		 *	only hold the mutex while we're updating the
+		 *	"new_listeners" list.
+		 *
+		 *	This means that we might process the same
+		 *	listener twice, but that's fine.
 		 */
 		for (this = new_listeners; this != NULL; this = next) {
 			next = this->next;
 			this->next = NULL;
 			this->fd_updating = false;
 
+			FD_MUTEX_UNLOCK(&fd_mutex);
 			event_new_fd(this);
+			FD_MUTEX_LOCK(&fd_mutex);
 		}
 
 		new_listeners = NULL;
