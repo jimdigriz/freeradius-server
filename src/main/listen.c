@@ -1145,14 +1145,6 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		return -1;
 	}
 
-#ifndef HAVE_KQUEUE
-	if (newfd >= FD_SETSIZE) {
-		RATE_LIMIT(INFO("Ignoring new connection from client %s too many connections are open", client->shortname));
-		close(newfd);
-		return 0;
-	}
-#endif
-
 	if (!fr_sockaddr2ipaddr(&src, salen, &src_ipaddr, &src_port)) {
 		close(newfd);
 		DEBUG2(" ... unknown address family");
@@ -1169,6 +1161,14 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		FR_STATS_INC(auth, total_invalid_requests);
 		return 0;
 	}
+
+#ifndef HAVE_KQUEUE
+	if (newfd >= FD_SETSIZE) {
+		RATE_LIMIT(INFO("Ignoring new connection from client %s too many connections are open", client->shortname));
+		close(newfd);
+		return 0;
+	}
+#endif
 
 #ifdef WITH_TLS
 	/*
