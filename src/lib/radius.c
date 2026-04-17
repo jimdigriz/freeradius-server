@@ -2207,12 +2207,6 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		uint8_t calc_auth_vector[AUTH_VECTOR_LEN];
 
 		switch (packet->code) {
-		case PW_CODE_ACCOUNTING_RESPONSE:
-			if (original && original->code == PW_CODE_STATUS_SERVER) {
-				goto do_ack;
-			}
-			/* FALL-THROUGH */
-
 		case PW_CODE_ACCOUNTING_REQUEST:
 		case PW_CODE_DISCONNECT_REQUEST:
 		case PW_CODE_COA_REQUEST:
@@ -2223,6 +2217,7 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		case PW_CODE_ACCESS_ACCEPT:
 		case PW_CODE_ACCESS_REJECT:
 		case PW_CODE_ACCESS_CHALLENGE:
+		case PW_CODE_ACCOUNTING_RESPONSE:
 		case PW_CODE_DISCONNECT_ACK:
 		case PW_CODE_DISCONNECT_NAK:
 		case PW_CODE_COA_ACK:
