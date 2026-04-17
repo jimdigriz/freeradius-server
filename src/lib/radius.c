@@ -2213,7 +2213,6 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 			memset(hdr->vector, 0, AUTH_VECTOR_LEN);
 			break;
 
-		do_ack:
 		case PW_CODE_ACCESS_ACCEPT:
 		case PW_CODE_ACCESS_REJECT:
 		case PW_CODE_ACCESS_CHALLENGE:
@@ -3091,23 +3090,17 @@ int rad_verify(RADIUS_PACKET *packet, RADIUSV11_UNUSED RADIUS_PACKET *original, 
 			default:
 				break;
 
-			case PW_CODE_ACCOUNTING_RESPONSE:
-				if (original &&
-				    (original->code == PW_CODE_STATUS_SERVER)) {
-					goto do_ack;
-				}
-				/* FALL-THROUGH */
-
 			case PW_CODE_ACCOUNTING_REQUEST:
 			case PW_CODE_DISCONNECT_REQUEST:
 			case PW_CODE_COA_REQUEST:
 				memset(packet->data + 4, 0, AUTH_VECTOR_LEN);
 				break;
 
-			do_ack:
+
 			case PW_CODE_ACCESS_ACCEPT:
 			case PW_CODE_ACCESS_REJECT:
 			case PW_CODE_ACCESS_CHALLENGE:
+			case PW_CODE_ACCOUNTING_RESPONSE:
 			case PW_CODE_DISCONNECT_ACK:
 			case PW_CODE_DISCONNECT_NAK:
 			case PW_CODE_COA_ACK:
