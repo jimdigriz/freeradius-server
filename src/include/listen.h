@@ -88,6 +88,9 @@ struct rad_listen {
 	fr_tls_server_conf_t *tls;
 	bool		check_client_connections;
 	bool		blocked;
+
+	fr_dlist_t		entry;		//!< for the home server free list
+
 #ifdef WITH_RADIUSV11
 	fr_radiusv11_t 	radiusv11;
 #endif

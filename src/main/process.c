@@ -4639,9 +4639,10 @@ void revive_home_server(void *ctx)
 }
 
 #ifdef WITH_TLS
-static int eol_home_listener(UNUSED void *ctx, void *data)
+static int eol_home_listener(void *ctx, void *data)
 {
 	rad_listen_t *this = talloc_get_type_abort(data, rad_listen_t);
+	fr_dlist_t *head = ctx;
 
 	/*
 	 *	The socket isn't blocked, we can still use it.
@@ -4656,13 +4657,7 @@ static int eol_home_listener(UNUSED void *ctx, void *data)
 
 	this->status = RAD_LISTEN_STATUS_EOL;
 
-	FD_MUTEX_LOCK(&fd_mutex);
-	if (!this->fd_updating) {
-		this->next = new_listeners;
-		this->fd_updating = true;
-		new_listeners = this;
-	}
-	FD_MUTEX_UNLOCK(&fd_mutex);
+	fr_dlist_insert_tail(head, &this->entry);
 
 	return 1;		/* alway delete from this tree */
 }
@@ -4693,10 +4688,35 @@ void mark_home_server_dead(home_server_t *home, struct timeval *when, bool down)
 	 *	that there are listeners waiting to be updated.
 	 */
 	if (home->listeners) {
+		fr_dlist_t head;
+
 		ASSERT_MASTER;
 
-		rbtree_walk(home->listeners, RBTREE_DELETE_ORDER, eol_home_listener, NULL);
-		radius_signal_self(RADIUS_SIGNAL_SELF_NEW_FD);
+		fr_dlist_entry_init(&head);
+
+		/*
+		 *	Walk the tree, inserting the listeners into the free list.
+		 */
+		rbtree_walk(home->listeners, RBTREE_DELETE_ORDER, eol_home_listener, &head);
+
+		if (!fr_dlist_empty(&head)) {
+			fr_dlist_t *entry;
+
+			FD_MUTEX_LOCK(&fd_mutex);
+			while ((entry = fr_dlist_pop_head(&head)) != NULL) {
+				rad_listen_t *this;
+
+				this = (rad_listen_t *) (((uint8_t *) entry) - offsetof(rad_listen_t, entry));
+
+				if (!this->fd_updating) {
+					this->next = new_listeners;
+					this->fd_updating = true;
+					new_listeners = this;
+				}
+			}
+			FD_MUTEX_UNLOCK(&fd_mutex);
+			radius_signal_self(RADIUS_SIGNAL_SELF_NEW_FD);
+		}
 	}
 #endif
 
