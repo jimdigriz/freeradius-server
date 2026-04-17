@@ -89,7 +89,7 @@ static void eap_teap_derive_imck(REQUEST *request, tls_session_t *tls_session,
 
 	t->imckc++;
 	RDEBUG2("Phase 2: Calculating ICMK for round (j = %d)", t->imckc);
-
+//if (t->imckc == 2) { RDEBUG("SKIP!!!<<<<"); return; }
 	uint8_t imsk_msk[EAP_TEAP_IMSK_LEN] = {0};
 	uint8_t imsk_emsk[EAP_TEAP_IMSK_LEN + 32];	// +32 for EMSK overflow
 	struct teap_imck_t imck_msk, imck_emsk;
@@ -1035,8 +1035,8 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 			fr_pair_delete_by_num(&reply->vps, PW_EAP_SESSION_ID, 0, TAG_ANY);
 		}
 
-		eap_teap_append_result(request, tls_session, reply->code);
-		eap_teap_append_crypto_binding(request, tls_session, msk, msklen, emsk, emsklen);
+		eap_teap_append_result(request, tls_session, t->imckc < 1 ? reply->code : PW_CODE_ACCESS_REJECT);
+		if (t->imckc < 1) eap_teap_append_crypto_binding(request, tls_session, msk, msklen, emsk, emsklen);
 
 		vp = fr_pair_find_by_num(request->state, PW_EAP_TEAP_TLV_IDENTITY_TYPE, VENDORPEC_FREERADIUS, TAG_ANY);
 		if (vp) {
@@ -1056,11 +1056,11 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 			t->username = NULL;
 
 			/* RFC7170, Appendix C.6 */
-			eap_teap_append_identity_type(request, tls_session, vp->vp_short);
-			sent_identity_type = true;
+			if (t->imckc < 1) eap_teap_append_identity_type(request, tls_session, vp->vp_short);
+			if (t->imckc < 1) sent_identity_type = true;
 
 			if (t->default_method || ((vp->vp_short == EAP_TEAP_IDENTITY_TYPE_USER || vp->vp_short == EAP_TEAP_IDENTITY_TYPE_MACHINE) && t->eap_method[vp->vp_short])) {
-				eap_teap_append_eap_identity_request(request, tls_session, eap_session);
+				if (t->imckc < 1) eap_teap_append_eap_identity_request(request, tls_session, eap_session);
 			}
 
 			if (!t->auto_chain) goto challenge;
@@ -1310,10 +1310,33 @@ fail:
 				 *	wpa_supplicant continues the authentication even when there are no remaining
 				 *	methods configured for it, so we skip only if this is the last round
 				 */
-				if ((t->identities_remaining == 1) &&
-				    !t->identity_types[identity_type_requested].required &&
-				    !(fr_pair_find_by_num(fake->packet->vps, PW_EAP_MESSAGE, 0, TAG_ANY) ||
-				      fr_pair_find_by_num(fake->packet->vps, PW_USER_PASSWORD, 0, TAG_ANY))) {
+				if (t->identities_remaining == 1 && !t->identity_types[identity_type_requested].required) {
+					vp = fr_pair_find_by_num(fake->packet->vps, PW_EAP_MESSAGE, 0, TAG_ANY);
+
+					/*
+					 * wpa_supplicant continues the authentication even when there are no remaining
+					 * methods configured for it but with no credential materials, so we finish
+					 */
+					if (!vp && !fr_pair_find_by_num(fake->packet->vps, PW_USER_PASSWORD, 0, TAG_ANY)) goto quirk;
+
+					/*
+					 * Win11 returns an empty EAP Identity, so we finish
+					 *  - only when we do *not* send Identity-Type for the second optional round
+					 *    otherwise it returns Error=Unexpected-TLVs, Result=Fail
+					 * methods configured for it but with no credential materials, so we finish
+					 */
+					if (vp &&
+					    (vp->vp_length >= EAP_HEADER_LEN + 1) &&
+					    (vp->vp_strvalue[0] == PW_EAP_RESPONSE) &&
+					    (vp->vp_strvalue[EAP_HEADER_LEN] == PW_EAP_IDENTITY)) {
+						// prevent Auth-Type=eap being added
+						fr_pair_delete(&fake->packet->vps, vp);
+						goto quirk;
+					}
+
+					goto notquirk;
+
+quirk:
 					/*
 					 *	If we didn't have at least one authentication success, we fail.
 					 */
@@ -1329,6 +1352,7 @@ fail:
 						vp->vp_integer = PW_AUTH_TYPE_ACCEPT;
 					}
 					goto done;
+notquirk:
 				}
 			}
 			vp_config = NULL;
