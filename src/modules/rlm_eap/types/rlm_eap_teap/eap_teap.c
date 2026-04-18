@@ -89,7 +89,7 @@ static void eap_teap_derive_imck(REQUEST *request, tls_session_t *tls_session,
 
 	t->imckc++;
 	RDEBUG2("Phase 2: Calculating ICMK for round (j = %d)", t->imckc);
-//if (t->imckc == 2) { RDEBUG("SKIP!!!<<<<"); return; }
+if (t->imckc > 1) { RDEBUG("SKIP!!!<<<<"); return; }
 	uint8_t imsk_msk[EAP_TEAP_IMSK_LEN] = {0};
 	uint8_t imsk_emsk[EAP_TEAP_IMSK_LEN + 32];	// +32 for EMSK overflow
 	struct teap_imck_t imck_msk, imck_emsk;
@@ -1035,8 +1035,8 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 			fr_pair_delete_by_num(&reply->vps, PW_EAP_SESSION_ID, 0, TAG_ANY);
 		}
 
-		eap_teap_append_result(request, tls_session, t->imckc < 1 ? reply->code : PW_CODE_ACCESS_REJECT);
-		if (t->imckc < 1) eap_teap_append_crypto_binding(request, tls_session, msk, msklen, emsk, emsklen);
+		eap_teap_append_result(request, tls_session, reply->code);
+		eap_teap_append_crypto_binding(request, tls_session, msk, msklen, emsk, emsklen);
 
 		vp = fr_pair_find_by_num(request->state, PW_EAP_TEAP_TLV_IDENTITY_TYPE, VENDORPEC_FREERADIUS, TAG_ANY);
 		if (vp) {
@@ -1056,11 +1056,11 @@ static rlm_rcode_t CC_HINT(nonnull) process_reply(eap_handler_t *eap_session,
 			t->username = NULL;
 
 			/* RFC7170, Appendix C.6 */
-			if (t->imckc < 1) eap_teap_append_identity_type(request, tls_session, vp->vp_short);
-			if (t->imckc < 1) sent_identity_type = true;
+			eap_teap_append_identity_type(request, tls_session, vp->vp_short);
+			sent_identity_type = true;
 
 			if (t->default_method || ((vp->vp_short == EAP_TEAP_IDENTITY_TYPE_USER || vp->vp_short == EAP_TEAP_IDENTITY_TYPE_MACHINE) && t->eap_method[vp->vp_short])) {
-				if (t->imckc < 1) eap_teap_append_eap_identity_request(request, tls_session, eap_session);
+				eap_teap_append_eap_identity_request(request, tls_session, eap_session);
 			}
 
 			if (!t->auto_chain) goto challenge;
