@@ -314,8 +314,10 @@ static void eap_teap_append_crypto_binding(REQUEST *request, tls_session_t *tls_
 
 	const EVP_MD *md = SSL_CIPHER_get_handshake_digest(SSL_get_current_cipher(tls_session->ssl));
 	HMAC(md, &t->imck_msk.cmk, EAP_TEAP_CMK_LEN, buf, buflen, mac_msk, &maclen);
+	RDEBUGHEX("Phase 2: Compound MAC (MSK)", mac_msk, maclen);
 	if (t->imck_emsk_available) {
 		HMAC(md, &t->imck_emsk.cmk, EAP_TEAP_CMK_LEN, buf, buflen, mac_emsk, &maclen);
+		RDEBUGHEX("Phase 2: Compound MAC (EMSK)", mac_emsk, maclen);
 	}
 	memcpy(cbb->binding.msk_compound_mac, &mac_msk, sizeof(cbb->binding.msk_compound_mac));
 	if (t->imck_emsk_available) {
