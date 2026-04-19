@@ -6230,6 +6230,7 @@ static void event_new_fd(void *ctx)
 		 *	Remove it from the list of live FD's.
 		 */
 		fr_event_fd_delete(el, 0, this->fd);
+		this->dead = true;
 
 	listener_is_eol:
 #ifdef WITH_PROXY
@@ -6285,6 +6286,9 @@ static void event_new_fd(void *ctx)
 		this->status = RAD_LISTEN_STATUS_REMOVE_NOW;
 	} /* socket is at EOL */
 
+	/*
+	 *	FD was already deleted.
+	 */
 	if (this->dead) goto wait_some_more;
 
 	/*
@@ -6437,7 +6441,10 @@ static void event_new_fd(void *ctx)
 		 *	Wait until all requests using this socket are done.
 		 */
 	wait_some_more:
-		fr_event_fd_delete(el, 0, this->fd);
+		if (!this->dead) {
+			fr_event_fd_delete(el, 0, this->fd);
+			this->dead = true;
+		}
 		listener_free_cb(this);
 #endif	/* WITH_TCP */
 	}
