@@ -5889,9 +5889,15 @@ static void listener_free_cb(void *ctx)
 {
 	rad_listen_t *this = talloc_get_type_abort(ctx, rad_listen_t);
 	listen_socket_t *sock = this->data;
+	bool updating;
 	char buffer[1024];
 
-	if (this->count > 0) {
+	FD_MUTEX_LOCK(&fd_mutex);
+	fr_assert(this->status == RAD_LISTEN_STATUS_REMOVE_NOW);
+	updating = this->fd_updating;
+	FD_MUTEX_UNLOCK(&fd_mutex);
+
+	if ((this->count > 0) || updating) {
 		struct timeval when;
 
 		fr_event_now(el, &when);
@@ -5912,7 +5918,6 @@ static void listener_free_cb(void *ctx)
 
 	this->print(this, buffer, sizeof(buffer));
 	DEBUG("... cleaning up socket %s", buffer);
-	rad_assert(this->next == NULL);
 #ifdef WITH_TCP
 	fr_event_delete(el, &sock->ev);
 #endif
