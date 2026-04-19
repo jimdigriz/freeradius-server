@@ -4303,6 +4303,7 @@ static void request_ping(REQUEST *request, int action)
 		request->home_server->num_received_pings++;
 		RPROXY("Received response to status check %d ID %u (%d in current sequence)",
 		       request->number, request->proxy->id, home->num_received_pings);
+		/* FALL_THROUGH */
 
 		/*
 		 *	Remove the request from any hashes
