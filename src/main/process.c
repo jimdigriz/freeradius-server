@@ -4298,7 +4298,6 @@ static void request_ping(REQUEST *request, int action)
 		break;
 
 	case FR_ACTION_PROXY_REPLY:
-	default:
 		rad_assert(request->in_proxy_hash);
 
 		request->home_server->num_received_pings++;
@@ -4308,6 +4307,9 @@ static void request_ping(REQUEST *request, int action)
 		/*
 		 *	Remove the request from any hashes
 		 */
+	case FR_ACTION_CANCELLED:
+	case FR_ACTION_MAX_TIME:
+	case FR_ACTION_INTERNAL_FAILURE:
 		fr_event_delete(el, &request->ev);
 		remove_from_proxy_hash(request);
 
@@ -4337,8 +4339,7 @@ static void request_ping(REQUEST *request, int action)
 		mark_home_server_alive(request, home);
 		break;
 
-	case FR_ACTION_RUN:
-	case FR_ACTION_DUP:
+	default:
 		RDEBUG3("%s: Ignoring action %s", __FUNCTION__, action_codes[action]);
 		return;
 	}
