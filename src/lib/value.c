@@ -743,10 +743,16 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		i = fr_strtoul(src, &p);
 
 		/*
-		 *	Look for the named src for the given
-		 *	attribute.
+		 *	Unexpected text after the number, try to parse
+		 *	the input as an enumerated name.  If we can't
+		 *	do that, fail.
 		 */
-		if (src_enumv && *p && !is_whitespace(p)) {
+		if (*p && !is_whitespace(p)) {
+			if (!src_enumv) {
+				fr_strerror_printf("Invalid byte value \"%s\"", src);
+				return -1;
+			}
+
 			if ((dval = dict_valbyname(src_enumv->attr, src_enumv->vendor, src)) == NULL) {
 				fr_strerror_printf("Unknown or invalid value \"%s\" for attribute %s",
 						   src, src_enumv->name);
@@ -776,10 +782,16 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		i = fr_strtoul(src, &p);
 
 		/*
-		 *	Look for the named src for the given
-		 *	attribute.
+		 *	Unexpected text after the number, try to parse
+		 *	the input as an enumerated name.  If we can't
+		 *	do that, fail.
 		 */
-		if (src_enumv && *p && !is_whitespace(p)) {
+		if (*p && !is_whitespace(p)) {
+			if (!src_enumv) {
+				fr_strerror_printf("Invalid short value \"%s\"", src);
+				return -1;
+			}
+
 			if ((dval = dict_valbyname(src_enumv->attr, src_enumv->vendor, src)) == NULL) {
 				fr_strerror_printf("Unknown or invalid value \"%s\" for attribute %s",
 						   src, src_enumv->name);
@@ -809,10 +821,17 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		i = fr_strtoul(src, &p);
 
 		/*
-		 *	Look for the named src for the given
-		 *	attribute.
+		 *	There's text left over after the number.  Either it
+		 *	names an enumerated value, or the input simply isn't
+		 *	a number.  Without an enumeration to consult, the
+		 *	only honest answer is to fail.
 		 */
-		if (src_enumv && *p && !is_whitespace(p)) {
+		if (*p && !is_whitespace(p)) {
+			if (!src_enumv) {
+				fr_strerror_printf("Invalid integer value \"%s\"", src);
+				return -1;
+			}
+
 			if ((dval = dict_valbyname(src_enumv->attr, src_enumv->vendor, src)) == NULL) {
 				fr_strerror_printf("Unknown or invalid value \"%s\" for attribute %s",
 						   src, src_enumv->name);
@@ -896,9 +915,20 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 *	ethernet address.
 		 */
 		if (is_integer(src)) {
-			uint64_t integer = htonll(atoll(src));
+			uint64_t int64 = (uint64_t) atoll(src);
 
-			memcpy(dst->ether, &integer, sizeof(dst->ether));
+			if (int64 > UINT64_C(0xffffffffffff)) {
+				fr_strerror_printf("Ethernet address \"%s\" is larger than 48 bits", src);
+				return -1;
+			}
+
+			int64 = htonll(int64);
+
+			/*
+			 *	Copy the lower 48 bits of the number into the ethernet field.
+			 */
+			memcpy(dst->ether, ((uint8_t *) &int64) + (sizeof(int64) - sizeof(dst->ether)),
+			       sizeof(dst->ether));
 			break;
 		}
 
@@ -922,6 +952,17 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 			}
 			dst->ether[p_len] = ((c1-hextab)<<4) + (c2-hextab);
 			p_len++;
+		}
+
+		/*
+		 *	The return length for a fixed-size type comes from the
+		 *	type table, so a short address would have claimed six
+		 *	valid bytes while leaving the rest untouched.
+		 */
+		if (p_len != sizeof(dst->ether)) {
+			fr_strerror_printf("Ethernet address \"%s\" is too short, expected 6 octets, got %zu",
+					   src, p_len);
+			return -1;
 		}
 	}
 		break;

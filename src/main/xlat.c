@@ -219,11 +219,12 @@ static ssize_t xlat_integer(UNUSED void *instance, REQUEST *request,
 
 	/*
 	 *	Ethernet is weird... It's network related, so we assume to it should be
-	 *	bigendian.
+	 *	bigendian.  We therefore copy it to the _lowe_ bytes of the int64 field.
 	 */
 	case PW_TYPE_ETHERNET:
-		memcpy(&int64, vp->vp_ether, vp->vp_length);
-		return snprintf(out, outlen, "%" PRIu64, htonll(int64));
+		memcpy(((uint8_t *) &int64) + (sizeof(int64) - sizeof(vp->vp_ether)),
+		       vp->vp_ether, sizeof(vp->vp_ether));
+		return snprintf(out, outlen, "%" PRIu64, ntohll(int64));
 
 	case PW_TYPE_SIGNED:
 		return snprintf(out, outlen, "%i", vp->vp_signed);

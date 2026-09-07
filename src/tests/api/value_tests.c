@@ -353,34 +353,55 @@ static void test_from_str_integer(void)
 	TEST_MSG("Expected 12345, got %u", dst.integer);
 }
 
-/** Non-numeric input is silently accepted as an integer
+/** Non-numeric input is rejected for an integer
  *
- * This pins current behaviour, which is wrong.  The trailing-garbage check
- * in the PW_TYPE_INTEGER case is gated on src_enumv being non-NULL, so with
- * no enumeration to consult the parser keeps whatever fr_strtoul() produced
- * and reports success.  "not-a-number" therefore becomes 0, and "42abc"
- * becomes 42.
- *
- * PW_TYPE_INTEGER64, immediately below it in value.c, uses sscanf() and does
- * return -1 for the same input, so the two types disagree.
- *
- * If value.c is fixed to reject this, these checks should become -1.
+ * The trailing-garbage check used to be gated on src_enumv being non-NULL,
+ * so with no enumeration to consult the parser kept whatever fr_strtoul()
+ * had produced and reported success.  "not-a-number" became 0, and "42abc"
+ * became 42.  Both are now errors.
  */
 static void test_from_str_integer_bad(void)
 {
 	value_data_t	dst;
 	PW_TYPE		type = PW_TYPE_INTEGER;
 
-	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "not-a-number", -1, '\0'), 4);
-	TEST_CHECK(dst.integer == 0);
+	TEST_CASE("Wholly non-numeric");
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "not-a-number", -1, '\0'), -1);
 
+	TEST_CASE("Trailing garbage after a number");
 	type = PW_TYPE_INTEGER;
-	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "42abc", -1, '\0'), 4);
-	TEST_CHECK(dst.integer == 42);
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "42abc", -1, '\0'), -1);
 
-	/* By contrast, integer64 rejects it */
+	TEST_CASE("integer64 agrees");
 	type = PW_TYPE_INTEGER64;
 	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "not-a-number", -1, '\0'), -1);
+
+	TEST_CASE("byte and short agree");
+	type = PW_TYPE_BYTE;
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "banana", -1, '\0'), -1);
+	type = PW_TYPE_SHORT;
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "banana", -1, '\0'), -1);
+}
+
+/** Forms which are still valid after tightening the parser
+ *
+ * Rejecting trailing garbage must not reject trailing whitespace, nor the
+ * "0x" hex form which fr_strtoul() accepts.
+ */
+static void test_from_str_integer_accepted_forms(void)
+{
+	value_data_t	dst;
+	PW_TYPE		type;
+
+	TEST_CASE("Trailing whitespace is allowed");
+	type = PW_TYPE_INTEGER;
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "42 ", -1, '\0'), 4);
+	TEST_CHECK(dst.integer == 42);
+
+	TEST_CASE("A hex prefix is allowed");
+	type = PW_TYPE_INTEGER;
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "0x2a", -1, '\0'), 4);
+	TEST_CHECK(dst.integer == 42);
 }
 
 static void test_from_str_byte(void)
@@ -516,16 +537,14 @@ static void test_from_str_ether(void)
 	TEST_CHECK(dst.ether[5] == 0x05);
 }
 
-/** A short Ethernet address is accepted, leaving trailing bytes uninitialised
+/** A short Ethernet address is rejected
  *
- * This pins current behaviour, which is a memory-safety bug.  The parse loop
- * consumes however many colon-separated octets it is given and never checks
- * that it filled all six.  The return value comes from the type size table
- * and is always 6, so the caller is told six bytes are valid when only five
- * were written.  The sixth byte below is the poison value this test wrote,
- * proving the parser did not touch it.
- *
- * If value.c is fixed to require six octets, this should become -1.
+ * The parse loop consumed however many colon-separated octets it was given
+ * and never checked that it had filled all six.  The return length for a
+ * fixed-size type comes from the type size table and is always 6, so the
+ * caller was told six bytes were valid while the tail of dst->ether was
+ * left untouched.  The poison byte below proves the parser writes nothing
+ * on the error path.
  */
 static void test_from_str_ether_short(void)
 {
@@ -534,16 +553,12 @@ static void test_from_str_ether_short(void)
 
 	memset(&dst, 0xAA, sizeof(dst));
 
-	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "00:01:02:03:04", -1, '\0'), 6);
-	TEST_CHECK(dst.ether[4] == 0x04);
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "00:01:02:03:04", -1, '\0'), -1);
 	TEST_CHECK(dst.ether[5] == 0xAA);
-	TEST_MSG("Byte 6 should be untouched poison, got 0x%02x", dst.ether[5]);
+	TEST_MSG("Nothing should be relied on after an error, got 0x%02x", dst.ether[5]);
 }
 
 /** A non-hex Ethernet address is rejected
- *
- * The parse loop does reject characters which are not hex digits, so this
- * error path works.  Only the length check is missing.
  */
 static void test_from_str_ether_bad(void)
 {
@@ -553,23 +568,31 @@ static void test_from_str_ether_bad(void)
 	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "zz:01:02:03:04:05", -1, '\0'), -1);
 }
 
-/** An integer is converted to an Ethernet address, but loses its low bytes
+/** An integer is converted to an Ethernet address
  *
- * This pins current behaviour, which is wrong.  is_integer() short-circuits
- * the colon parsing, and the value is byte-swapped into a 64 bit integer and
- * then memcpy()d from its *first* six bytes.  For a big-endian 64 bit value
- * those are the high-order bytes, which are zero for any address that fits in
- * 48 bits, so the address that actually mattered is discarded.  The copy
- * should start two bytes in.
+ * is_integer() short-circuits the colon parsing.  The value is byte-swapped
+ * into a 64 bit integer, of which the low-order 48 bits are the address.  In
+ * network byte order those are the last six bytes, so the copy has to start
+ * two bytes in; it used to start at the front and take the high-order bytes,
+ * which are zero for any address that fits in 48 bits.
  */
 static void test_from_str_ether_from_integer(void)
 {
 	value_data_t	dst;
 	PW_TYPE		type = PW_TYPE_ETHERNET;
 
+	TEST_CASE("12345 is 0x3039, so it lands in the last two octets");
 	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "12345", -1, '\0'), 6);
-	TEST_CHECK(memcmp(dst.ether, "\x00\x00\x00\x00\x00\x00", 6) == 0);
-	TEST_MSG("12345 should give 00:00:00:00:30:39, but the low bytes are dropped");
+	TEST_CHECK(memcmp(dst.ether, "\x00\x00\x00\x00\x30\x39", 6) == 0);
+
+	TEST_CASE("The largest value which fits in 48 bits");
+	type = PW_TYPE_ETHERNET;
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "281474976710655", -1, '\0'), 6);
+	TEST_CHECK(memcmp(dst.ether, "\xff\xff\xff\xff\xff\xff", 6) == 0);
+
+	TEST_CASE("Anything larger cannot be an Ethernet address");
+	type = PW_TYPE_ETHERNET;
+	TEST_CHECK_SLEN(value_data_from_str(autofree, &dst, &type, NULL, "281474976710656", -1, '\0'), -1);
 }
 
 static void test_from_str_null(void)
@@ -643,11 +666,11 @@ static void test_cast_string_to_integer(void)
 	TEST_CHECK(dst.integer == 12345);
 }
 
-/** Casting a non-numeric string to an integer silently succeeds
+/** Casting a non-numeric string to an integer fails
  *
  * Casting from a string is implemented by calling value_data_from_str(), so
- * this inherits the laxness documented on test_from_str_integer_bad().
- * Casting the same string to an integer64 does fail.
+ * this follows whatever that function does with malformed input.  It used to
+ * succeed and yield 0.
  */
 static void test_cast_string_to_integer_bad(void)
 {
@@ -656,8 +679,7 @@ static void test_cast_string_to_integer_bad(void)
 	src.strvalue = "banana";
 
 	TEST_CHECK_SLEN(value_data_cast(autofree, &dst, PW_TYPE_INTEGER, NULL,
-					PW_TYPE_STRING, NULL, &src, 6), 4);
-	TEST_CHECK(dst.integer == 0);
+					PW_TYPE_STRING, NULL, &src, 6), -1);
 
 	TEST_CHECK_SLEN(value_data_cast(autofree, &dst, PW_TYPE_INTEGER64, NULL,
 					PW_TYPE_STRING, NULL, &src, 6), -1);
@@ -1013,6 +1035,7 @@ TEST_LIST = {
 	 */
 	{ "from_str_integer",			test_from_str_integer },
 	{ "from_str_integer_bad",		test_from_str_integer_bad },
+	{ "from_str_integer_accepted_forms",	test_from_str_integer_accepted_forms },
 	{ "from_str_byte",			test_from_str_byte },
 	{ "from_str_short",			test_from_str_short },
 	{ "from_str_signed",			test_from_str_signed },
