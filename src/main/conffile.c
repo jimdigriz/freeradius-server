@@ -457,7 +457,7 @@ static int cf_file_open(CONF_SECTION *cs, char const *filename, bool from_dir, F
 	fp = fopen(filename, "r");
 	if (!fp) {
 error:
-		cf_log_err(&(cs->item), "Unable to open file \"%s\": %s",
+		cf_log_err(&(cs->item), "Unable to open file '%s': %s",
 			   filename, fr_syserror(errno));
 		return -1;
 	}
@@ -524,7 +524,7 @@ bool cf_file_check(CONF_SECTION *cs, char const *filename, bool check_perms)
 	file->cs = cs;
 
 	if (stat(filename, &file->buf) < 0) {
-		cf_log_err(&(cs->item), "Unable to check file \"%s\": %s", filename, fr_syserror(errno));
+		cf_log_err(&(cs->item), "Unable to check file '%s': %s", filename, fr_syserror(errno));
 		talloc_free(file);
 		return false;
 	}
@@ -1406,7 +1406,7 @@ static char const *cf_expand_variables(char const *cf, int *lineno,
 			ci = cf_reference_item(parentcs, outercs, name);
 			if (!ci) {
 				if (soft_fail) *soft_fail = true;
-				ERROR("%s[%d]: Reference \"${%s}\" not found", cf, *lineno, name);
+				ERROR("%s[%d]: Reference '${%s}' not found", cf, *lineno, name);
 				return NULL;
 			}
 
@@ -1453,7 +1453,7 @@ static char const *cf_expand_variables(char const *cf, int *lineno,
 				if (cp->pass2) {
 					if (soft_fail) *soft_fail = true;
 
-					ERROR("%s[%d]: Reference \"%s\" points to a variable which has not been expanded.",
+					ERROR("%s[%d]: Reference '%s' points to a variable which has not been expanded.",
 					      cf, *lineno, input);
 					return NULL;
 				}
@@ -1469,7 +1469,7 @@ static char const *cf_expand_variables(char const *cf, int *lineno,
 				}
 
 				if (p + strlen(cp->value) >= output + outsize) {
-					ERROR("%s[%d]: Reference \"%s\" is too long",
+					ERROR("%s[%d]: Reference '%s' is too long",
 					       cf, *lineno, input);
 					return NULL;
 				}
@@ -1512,7 +1512,7 @@ static char const *cf_expand_variables(char const *cf, int *lineno,
 				ptr = end + 1;
 
 			} else {
-				ERROR("%s[%d]: Reference \"%s\" type is invalid", cf, *lineno, input);
+				ERROR("%s[%d]: Reference '%s' type is invalid", cf, *lineno, input);
 				return NULL;
 			}
 		} else if (strncmp(ptr, "$ENV{", 5) == 0) {
@@ -1557,7 +1557,7 @@ static char const *cf_expand_variables(char const *cf, int *lineno,
 			}
 
 			if (p + strlen(env) >= output + outsize) {
-				ERROR("%s[%d]: Reference \"%s\" is too long",
+				ERROR("%s[%d]: Reference '%s' is too long",
 				       cf, *lineno, input);
 				return NULL;
 			}
@@ -1585,7 +1585,7 @@ static char const *cf_expand_variables(char const *cf, int *lineno,
 
 
 		if (p >= (output + outsize)) {
-			ERROR("%s[%d]: Reference \"%s\" is too long",
+			ERROR("%s[%d]: Reference '%s' is too long",
 			       cf, *lineno, input);
 			return NULL;
 		}
@@ -1623,14 +1623,14 @@ static inline int fr_item_validate_ipaddr(CONF_SECTION *cs, char const *name, PW
 		case AF_INET:
 			if (ipaddr->prefix == 32) return 0;
 
-			cf_log_err(&(cs->item), "Invalid IPv4 mask length \"/%i\".  Only \"/32\" permitted for non-prefix types",
+			cf_log_err(&(cs->item), "Invalid IPv4 mask length '/%i'.  Only '/32' permitted for non-prefix types",
 				   ipaddr->prefix);
 			break;
 
 		case AF_INET6:
 			if (ipaddr->prefix == 128) return 0;
 
-			cf_log_err(&(cs->item), "Invalid IPv6 mask length \"/%i\".  Only \"/128\" permitted for non-prefix types",
+			cf_log_err(&(cs->item), "Invalid IPv6 mask length '/%i'.  Only '/128' permitted for non-prefix types",
 				   ipaddr->prefix);
 			break;
 
@@ -1726,7 +1726,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 	char buffer[8192];
 
 	if (!cs) {
-		cf_log_err(&(cs->item), "No enclosing section for configuration item \"%s\"", name);
+		cf_log_err(&(cs->item), "No enclosing section for configuration item '%s'", name);
 		return -1;
 	}
 
@@ -1750,7 +1750,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 	 *	Everything except templates must have a base type.
 	 */
 	if (!(type & 0xff) && !tmpl) {
-		cf_log_err(c_item, "Configuration item \"%s\" must have a data type", name);
+		cf_log_err(c_item, "Configuration item '%s' must have a data type", name);
 		return -1;
 	}
 
@@ -1780,7 +1780,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 		c_item = &cp->item;
 
 		if (deprecated) {
-			cf_log_err(c_item, "Configuration item \"%s\" is deprecated", name);
+			cf_log_err(c_item, "Configuration item '%s' is deprecated", name);
 			return -2;
 		}
 
@@ -1810,7 +1810,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 
 	if (!value) {
 		if (required) {
-			cf_log_err(c_item, "Configuration item \"%s\" must have a value", name);
+			cf_log_err(c_item, "Configuration item '%s' must have a value", name);
 
 			return -1;
 		}
@@ -1819,7 +1819,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 
 	if ((value[0] == '\0') && cant_be_empty) {
 	cant_be_empty:
-		cf_log_err(c_item, "Configuration item \"%s\" must not be empty (zero length)", name);
+		cf_log_err(c_item, "Configuration item '%s' must not be empty (zero length)", name);
 		if (!required) cf_log_err(c_item, "Comment item to silence this message");
 
 		return -1;
@@ -1861,7 +1861,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 			*(bool *)data = false;
 		} else {
 			*(bool *)data = false;
-			cf_log_err(&(cs->item), "Invalid value \"%s\" for boolean "
+			cf_log_err(&(cs->item), "Invalid value '%s' for boolean "
 			       "variable %s", value, name);
 			return -1;
 		}
@@ -1881,7 +1881,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 		 *	represent config item integers.
 		 */
 		if (v > INT32_MAX) {
-			cf_log_err(&(cs->item), "Invalid value \"%s\" for variable %s, must be between 0-%u", value,
+			cf_log_err(&(cs->item), "Invalid value '%s' for variable %s, must be between 0-%u", value,
 				   name, INT32_MAX);
 			return -1;
 		}
@@ -1896,7 +1896,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 		unsigned long v = strtoul(value, 0, 0);
 
 		if (v > UINT8_MAX) {
-			cf_log_err(&(cs->item), "Invalid value \"%s\" for variable %s, must be between 0-%u", value,
+			cf_log_err(&(cs->item), "Invalid value '%s' for variable %s, must be between 0-%u", value,
 				   name, UINT8_MAX);
 			return -1;
 		}
@@ -1910,7 +1910,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 		unsigned long v = strtoul(value, 0, 0);
 
 		if (v > UINT16_MAX) {
-			cf_log_err(&(cs->item), "Invalid value \"%s\" for variable %s, must be between 0-%u", value,
+			cf_log_err(&(cs->item), "Invalid value '%s' for variable %s, must be between 0-%u", value,
 				   name, UINT16_MAX);
 			return -1;
 		}
@@ -2032,7 +2032,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 			cf_log_info(cs, "%.*s\t%s = <<< secret >>>",
 				    cs->depth, parse_spaces, name);
 		} else {
-			cf_log_info(cs, "%.*s\t%s = \"%s\"",
+			cf_log_info(cs, "%.*s\t%s = '%s'",
 				    cs->depth, parse_spaces, name, value ? value : "(null)");
 		}
 		*q = value ? talloc_typed_strdup(cs, value) : NULL;
@@ -2044,12 +2044,12 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 		 *	server startup.
 		 */
 		if (*q && file_input && !cf_file_check(cs, *q, true)) {
-			cf_log_err(&(cs->item), "Failed parsing configuration item \"%s\"", name);
+			cf_log_err(&(cs->item), "Failed parsing configuration item '%s'", name);
 			return -1;
 		}
 
 		if (*q && file_exists && !cf_file_check(cs, *q, false)) {
-			cf_log_err(&(cs->item), "Failed parsing configuration item \"%s\"", name);
+			cf_log_err(&(cs->item), "Failed parsing configuration item '%s'", name);
 			return -1;
 		}
 		break;
@@ -2060,7 +2060,7 @@ int cf_item_parse(CONF_SECTION *cs, char const *name, unsigned int type, void *d
 
 		if (fr_pton4(ipaddr, value, -1, true, false) < 0) {
 		failed:
-			cf_log_err(&(cs->item), "Failed parsing configuration item \"%s\" - %s", name, fr_strerror());
+			cf_log_err(&(cs->item), "Failed parsing configuration item '%s' - %s", name, fr_strerror());
 			return -1;
 		}
 		if (fr_item_validate_ipaddr(cs, name, type, value, ipaddr) < 0) return -1;
@@ -2323,10 +2323,10 @@ int cf_section_parse(CONF_SECTION *cs, void *base, CONF_PARSER const *variables)
 		case -2:	/* Deprecated CONF ITEM */
 			if ((variables[i + 1].offset == variables[i].offset) &&
 			    (variables[i + 1].data == variables[i].data)) {
-				cf_log_err(&(cs->item), "Replace \"%s\" with \"%s\"", variables[i].name,
+				cf_log_err(&(cs->item), "Replace '%s' with '%s'", variables[i].name,
 					   variables[i + 1].name);
 			} else {
-				cf_log_err(&(cs->item), "Cannot use deprecated configuration item \"%s\"", variables[i].name);
+				cf_log_err(&(cs->item), "Cannot use deprecated configuration item '%s'", variables[i].name);
 			}
 			goto finish;
 		}
@@ -3034,13 +3034,13 @@ static int cf_section_read(char const *filename, int *lineno, FILE *fp,
 
 		       templatecs = cf_section_sub_find(parentcs, "templates");
 		       if (!templatecs) {
-				ERROR("%s[%d]: No \"templates\" section for reference \"%s\"", filename, *lineno, buf2);
+				ERROR("%s[%d]: No 'templates' section for reference '%s'", filename, *lineno, buf2);
 				return -1;
 		       }
 
 		       ci = cf_reference_item(parentcs, templatecs, buf2);
 		       if (!ci || (ci->type != CONF_ITEM_SECTION) || !this) {
-				ERROR("%s[%d]: Reference \"%s\" not found", filename, *lineno, buf2);
+				ERROR("%s[%d]: Reference '%s' not found", filename, *lineno, buf2);
 				return -1;
 		       }
 
@@ -3058,7 +3058,7 @@ static int cf_section_read(char const *filename, int *lineno, FILE *fp,
 		 *	with 'internal' names;
 		 */
 		if (buf1[0] == '_') {
-			ERROR("%s[%d]: Illegal configuration pair name \"%s\"", filename, *lineno, buf1);
+			ERROR("%s[%d]: Illegal configuration pair name '%s'", filename, *lineno, buf1);
 			return -1;
 		}
 
@@ -3173,7 +3173,7 @@ static int cf_section_read(char const *filename, int *lineno, FILE *fp,
 
 			if ((size_t) slen >= (sizeof(buf2) - 1)) {
 				talloc_free(css);
-				ERROR("%s[%d]: Condition is too large after \"%s\"",
+				ERROR("%s[%d]: Condition is too large after '%s'",
 				       filename, *lineno, buf1);
 				return -1;
 			}
@@ -3369,7 +3369,7 @@ static int cf_section_read(char const *filename, int *lineno, FILE *fp,
 		case T_SINGLE_QUOTED_STRING:
 			t3 = gettoken(&ptr, buf3, sizeof(buf3), true);
 			if (t3 != T_LCBRACE) {
-				ERROR("%s[%d]: Expecting section start brace '{' after \"%s %s\"",
+				ERROR("%s[%d]: Expecting section start brace '{' after '%s %s'",
 				       filename, *lineno, buf1, buf2);
 				return -1;
 			}
@@ -3405,7 +3405,7 @@ static int cf_section_read(char const *filename, int *lineno, FILE *fp,
 			return -1;
 
 		default:
-			ERROR("%s[%d]: Parse error after \"%s\": unexpected token \"%s\"",
+			ERROR("%s[%d]: Parse error after '%s': unexpected token '%s'",
 			      filename, *lineno, buf1, fr_int2str(fr_tokens, t2, "<INVALID>"));
 
 			return -1;

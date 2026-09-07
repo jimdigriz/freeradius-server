@@ -674,7 +674,7 @@ static int fr_fault_check_permissions(void)
 	if (stat(p, &statbuf) == 0) {
 #ifdef S_IWOTH
 		if ((statbuf.st_mode & S_IWOTH) != 0) {
-			fr_strerror_printf("panic_action file \"%s\" is globally writable", p);
+			fr_strerror_printf("panic_action file '%s' is globally writable", p);
 			return -1;
 		}
 #endif

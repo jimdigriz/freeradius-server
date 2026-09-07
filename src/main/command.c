@@ -410,7 +410,7 @@ static int fr_server_domain_socket_perm(char const *path, uid_t uid, gid_t gid)
 			talloc_free(user);
 			goto error;
 		}
-		fr_strerror_printf("Failed opening directory \"%s\": %s.  Must be created manually, or modified, "
+		fr_strerror_printf("Failed opening directory '%s': %s.  Must be created manually, or modified, "
 				   "with permissions that allow writing by user %s or group %s", dir,
 				   user->pw_name, group->gr_name, fr_syserror(errno));
 		talloc_free(user);
@@ -496,7 +496,7 @@ static int fr_server_domain_socket_perm(char const *path, uid_t uid, gid_t gid)
 				talloc_free(need_group);
 				goto error;
 			}
-			fr_strerror_printf("Control socket directory \"%s\" must be owned by group %s, "
+			fr_strerror_printf("Control socket directory '%s' must be owned by group %s, "
 					   "currently owned by %s", dir, need_group->gr_name, have_group->gr_name);
 			talloc_free(need_group);
 			talloc_free(have_group);
@@ -530,7 +530,7 @@ static int fr_server_domain_socket_perm(char const *path, uid_t uid, gid_t gid)
 
 	name = strrchr(path, FR_DIR_SEP);
 	if (!name) {
-		fr_strerror_printf("Failed to determine socket name from \"%s\"", path);
+		fr_strerror_printf("Failed to determine socket name from '%s'", path);
 		goto error;
 	}
 	name++;
@@ -757,7 +757,7 @@ static int command_hup(rad_listen_t *listener, int argc, char *argv[])
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return CMD_FAIL;
 	}
 
@@ -906,7 +906,7 @@ static void cprint_conf_parser(rad_listen_t *listener, int indent, CONF_SECTION 
 			 *	FIXME: Escape things in the string!
 			 */
 			if (*(char const * const *) data) {
-				cprintf(listener, "%.*s%s = \"%s\"\n", indent, tabs,
+				cprintf(listener, "%.*s%s = '%s'\n", indent, tabs,
 					variables[i].name, *(char const * const *) data);
 			} else {
 				cprintf(listener, "%.*s%s = \n", indent, tabs,
@@ -987,7 +987,7 @@ static int command_show_module_config(rad_listen_t *listener, int argc, char *ar
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return CMD_FAIL;
 	}
 
@@ -1030,7 +1030,7 @@ static int command_show_module_methods(rad_listen_t *listener, int argc, char *a
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return CMD_FAIL;
 	}
 
@@ -1060,7 +1060,7 @@ static int command_show_module_flags(rad_listen_t *listener, int argc, char *arg
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return CMD_FAIL;
 	}
 
@@ -1090,7 +1090,7 @@ static int command_show_module_status(rad_listen_t *listener, int argc, char *ar
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return CMD_FAIL;
 	}
 
@@ -1507,7 +1507,7 @@ static int command_debug_condition(rad_listen_t *listener, int argc, char *argv[
 		ERROR("%s", p);
 		ERROR("%s^ %s", spaces, error);
 
-		cprintf_error(listener, "Parse error in condition \"%s\": %s\n", p, error);
+		cprintf_error(listener, "Parse error in condition '%s': %s\n", p, error);
 
 		talloc_free(spaces);
 		talloc_free(text);
@@ -1773,7 +1773,7 @@ static int command_set_home_server_state(rad_listen_t *listener, int argc, char 
 		mark_home_server_dead(home, &now, true);
 
 	} else {
-		cprintf_error(listener, "Unknown state \"%s\"\n", argv[last]);
+		cprintf_error(listener, "Unknown state '%s'\n", argv[last]);
 		return CMD_FAIL;
 	}
 
@@ -1964,7 +1964,7 @@ static int command_inject_from(rad_listen_t *listener, int argc, char *argv[])
 
 	sock = listener->data;
 	if (!sock->inject_listener) {
-		cprintf_error(listener, "You must specify \"inject to\" before using \"inject from\"\n");
+		cprintf_error(listener, "You must specify 'inject to' before using 'inject from'\n");
 		return 0;
 	}
 
@@ -2012,12 +2012,12 @@ static int command_inject_file(rad_listen_t *listener, int argc, char *argv[])
 
 	sock = listener->data;
 	if (!sock->inject_listener) {
-		cprintf_error(listener, "You must specify \"inject to\" before using \"inject file\"\n");
+		cprintf_error(listener, "You must specify 'inject to' before using 'inject file'\n");
 		return 0;
 	}
 
 	if (!sock->inject_client) {
-		cprintf_error(listener, "You must specify \"inject from\" before using \"inject file\"\n");
+		cprintf_error(listener, "You must specify 'inject from' before using 'inject file'\n");
 		return 0;
 	}
 
@@ -2259,7 +2259,7 @@ static int command_set_module_config(rad_listen_t *listener, int argc, char *arg
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return 0;
 	}
 
@@ -2288,7 +2288,7 @@ static int command_set_module_config(rad_listen_t *listener, int argc, char *arg
 	}
 
 	if (rcode < 0) {
-		cprintf_error(listener, "No such variable \"%s\"\n", argv[1]);
+		cprintf_error(listener, "No such variable '%s'\n", argv[1]);
 		return 0;
 	}
 
@@ -2342,7 +2342,7 @@ static int command_set_module_status(rad_listen_t *listener, int argc, char *arg
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return 0;
 	}
 
@@ -2359,7 +2359,7 @@ static int command_set_module_status(rad_listen_t *listener, int argc, char *arg
 
 		rcode = fr_str2int(mod_rcode_table, argv[1], -1);
 		if (rcode < 0) {
-			cprintf_error(listener, "Unknown status \"%s\"\n", argv[1]);
+			cprintf_error(listener, "Unknown status '%s'\n", argv[1]);
 			return 0;
 		}
 
@@ -2717,7 +2717,7 @@ static int command_stats_pool(rad_listen_t *listener, int argc, char *argv[])
 
 	mi = module_find(cs, argv[0]);
 	if (!mi) {
-		cprintf_error(listener, "No such module \"%s\"\n", argv[0]);
+		cprintf_error(listener, "No such module '%s'\n", argv[0]);
 		return CMD_FAIL;
 	}
 
@@ -3075,7 +3075,7 @@ static int command_socket_parse_unix(CONF_SECTION *cs, rad_listen_t *this)
 	} else {
 		sock->co.mode = fr_str2int(mode_names, sock->mode_name, 0);
 		if (!sock->co.mode) {
-			ERROR("Invalid mode name \"%s\"",
+			ERROR("Invalid mode name '%s'",
 			       sock->mode_name);
 			return -1;
 		}
@@ -3094,7 +3094,7 @@ static int command_socket_parse_unix(CONF_SECTION *cs, rad_listen_t *this)
 	}
 
 	if (this->fd < 0) {
-		ERROR("Failed creating control socket \"%s\": %s", sock->path, fr_strerror());
+		ERROR("Failed creating control socket '%s': %s", sock->path, fr_strerror());
 		if (sock->copy) talloc_free(sock->copy);
 		sock->copy = NULL;
 		return -1;
@@ -3318,7 +3318,7 @@ static int command_domain_recv_co(rad_listen_t *listener, fr_cs_buffer_t *co)
 			 */
 			if (((co->mode & FR_WRITE) == 0) &&
 			    ((table[i].mode & FR_WRITE) != 0)) {
-				cprintf_error(listener, "You do not have write permission.  See \"mode = rw\" in the \"listen\" section for this socket.\n");
+				cprintf_error(listener, "You do not have write permission.  See 'mode = rw' in the 'listen' section for this socket.\n");
 				goto do_next;
 			}
 
@@ -3372,7 +3372,7 @@ static int command_domain_recv_co(rad_listen_t *listener, fr_cs_buffer_t *co)
 			goto do_next;
 		}
 
-		cprintf_error(listener, "Unknown command \"%s\"\n",
+		cprintf_error(listener, "Unknown command '%s'\n",
 			      argv[0]);
 	}
 

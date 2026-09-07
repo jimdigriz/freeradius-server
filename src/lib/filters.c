@@ -533,7 +533,7 @@ static int ascend_parse_ipx(int argc, char **argv, ascend_ipx_filter_t *filter)
 			break;
 
 		default:
-			fr_strerror_printf("Unknown string \"%s\" in IPX data filter",
+			fr_strerror_printf("Unknown string '%s' in IPX data filter",
 				   argv[0]);
 			return -1;
 		}
@@ -810,7 +810,7 @@ static int ascend_parse_ip(int argc, char **argv, ascend_ip_filter_t *filter)
 			} else {
 				token = fr_str2int(filterProtoName, argv[0], -1);
 				if (token == -1) {
-					fr_strerror_printf("Unknown IP protocol \"%s\" in IP data filter",
+					fr_strerror_printf("Unknown IP protocol '%s' in IP data filter",
 						   argv[0]);
 					return -1;
 				}
@@ -828,7 +828,7 @@ static int ascend_parse_ip(int argc, char **argv, ascend_ip_filter_t *filter)
 	 *	We should have parsed everything by now.
 	 */
 	if (argc != 0) {
-		fr_strerror_printf("Unknown extra string \"%s\" in IP data filter",
+		fr_strerror_printf("Unknown extra string '%s' in IP data filter",
 			   argv[0]);
 		return -1;
 	}
@@ -976,7 +976,7 @@ static int ascend_parse_ipv6(int argc, char **argv, ascend_ipv6_filter_t *filter
 			} else {
 				token = fr_str2int(filterProtoName, argv[0], -1);
 				if (token == -1) {
-					fr_strerror_printf("Unknown IP protocol \"%s\" in IPv6 data filter",
+					fr_strerror_printf("Unknown IP protocol '%s' in IPv6 data filter",
 						   argv[0]);
 					return -1;
 				}
@@ -994,7 +994,7 @@ static int ascend_parse_ipv6(int argc, char **argv, ascend_ipv6_filter_t *filter
 	 *	We should have parsed everything by now.
 	 */
 	if (argc != 0) {
-		fr_strerror_printf("Unknown extra string \"%s\" in IPv6 data filter",
+		fr_strerror_printf("Unknown extra string '%s' in IPv6 data filter",
 			   argv[0]);
 		return -1;
 	}
@@ -1097,7 +1097,7 @@ static int ascend_parse_generic(int argc, char **argv,
 			break;
 
 		default:
-			fr_strerror_printf("Invalid string \"%s\" in generic data filter",
+			fr_strerror_printf("Invalid string '%s' in generic data filter",
 				   argv[0]);
 			return -1;
 		}
@@ -1146,7 +1146,7 @@ int ascend_parse_filter(TALLOC_CTX *ctx, value_data_t *out, char const *value, s
 	 *	a general one here, which won't be used if the function
 	 *	returns OK.
 	 */
-	fr_strerror_printf("Failed parsing \"%s\" as ascend filer", p);
+	fr_strerror_printf("Failed parsing '%s' as ascend filer", p);
 
 	argc = str2argv(p, argv, 32);
 	if (argc < 3) {
@@ -1173,7 +1173,7 @@ int ascend_parse_filter(TALLOC_CTX *ctx, value_data_t *out, char const *value, s
 		break;
 
 	default:
-		fr_strerror_printf("Unknown Ascend filter type \"%s\"", argv[0]);
+		fr_strerror_printf("Unknown Ascend filter type '%s'", argv[0]);
 		talloc_free(p);
 		return -1;
 	}
@@ -1192,7 +1192,7 @@ int ascend_parse_filter(TALLOC_CTX *ctx, value_data_t *out, char const *value, s
 		break;
 
 	default:
-		fr_strerror_printf("Unknown Ascend filter direction \"%s\"", argv[1]);
+		fr_strerror_printf("Unknown Ascend filter direction '%s'", argv[1]);
 		talloc_free(p);
 		return -1;
 	}
@@ -1211,7 +1211,7 @@ int ascend_parse_filter(TALLOC_CTX *ctx, value_data_t *out, char const *value, s
 		break;
 
 	default:
-		fr_strerror_printf("Unknown Ascend filter action \"%s\"", argv[2]);
+		fr_strerror_printf("Unknown Ascend filter action '%s'", argv[2]);
 		talloc_free(p);
 		return -1;
 	}

@@ -661,7 +661,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 *	print them this way.
 		 */
 		if (addr.prefix != 32) {
-			fr_strerror_printf("Invalid IPv4 mask length \"/%i\".  Only \"/32\" permitted "
+			fr_strerror_printf("Invalid IPv4 mask length '/%i'.  Only '/32' permitted "
 					   "for non-prefix types", addr.prefix);
 			return -1;
 		}
@@ -693,7 +693,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 *	print them this way.
 		 */
 		if (addr.prefix != 128) {
-			fr_strerror_printf("Invalid IPv6 mask length \"/%i\".  Only \"/128\" permitted "
+			fr_strerror_printf("Invalid IPv6 mask length '/%i'.  Only '/128' permitted "
 					   "for non-prefix types", addr.prefix);
 			return -1;
 		}
@@ -745,7 +745,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 			break;
 		}
 
-		fr_strerror_printf("Invalid value \"%s\" for boolean", src);
+		fr_strerror_printf("Invalid value '%s' for boolean", src);
 		return -1;
 
 	case PW_TYPE_BYTE:
@@ -765,12 +765,12 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 */
 		if (*p && !is_whitespace(p)) {
 			if (!src_enumv) {
-				fr_strerror_printf("Invalid byte value \"%s\"", src);
+				fr_strerror_printf("Invalid byte value '%s'", src);
 				return -1;
 			}
 
 			if ((dval = dict_valbyname(src_enumv->attr, src_enumv->vendor, src)) == NULL) {
-				fr_strerror_printf("Unknown or invalid value \"%s\" for attribute %s",
+				fr_strerror_printf("Unknown or invalid value '%s' for attribute %s",
 						   src, src_enumv->name);
 				return -1;
 			}
@@ -778,7 +778,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 			dst->byte = dval->value;
 		} else {
 			if (i > 255) {
-				fr_strerror_printf("Byte value \"%s\" is larger than 255", src);
+				fr_strerror_printf("Byte value '%s' is larger than 255", src);
 				return -1;
 			}
 
@@ -804,12 +804,12 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 */
 		if (*p && !is_whitespace(p)) {
 			if (!src_enumv) {
-				fr_strerror_printf("Invalid short value \"%s\"", src);
+				fr_strerror_printf("Invalid short value '%s'", src);
 				return -1;
 			}
 
 			if ((dval = dict_valbyname(src_enumv->attr, src_enumv->vendor, src)) == NULL) {
-				fr_strerror_printf("Unknown or invalid value \"%s\" for attribute %s",
+				fr_strerror_printf("Unknown or invalid value '%s' for attribute %s",
 						   src, src_enumv->name);
 				return -1;
 			}
@@ -817,7 +817,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 			dst->ushort = dval->value;
 		} else {
 			if (i > 65535) {
-				fr_strerror_printf("Short value \"%s\" is larger than 65535", src);
+				fr_strerror_printf("Short value '%s' is larger than 65535", src);
 				return -1;
 			}
 
@@ -844,12 +844,12 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 */
 		if (*p && !is_whitespace(p)) {
 			if (!src_enumv) {
-				fr_strerror_printf("Invalid integer value \"%s\"", src);
+				fr_strerror_printf("Invalid integer value '%s'", src);
 				return -1;
 			}
 
 			if ((dval = dict_valbyname(src_enumv->attr, src_enumv->vendor, src)) == NULL) {
-				fr_strerror_printf("Unknown or invalid value \"%s\" for attribute %s",
+				fr_strerror_printf("Unknown or invalid value '%s' for attribute %s",
 						   src, src_enumv->name);
 				return -1;
 			}
@@ -872,7 +872,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 *	Note that ALL integers are unsigned!
 		 */
 		if (sscanf(src, "%" PRIu64, &i) != 1) {
-			fr_strerror_printf("Failed parsing \"%s\" as unsigned 64bit integer", src);
+			fr_strerror_printf("Failed parsing '%s' as unsigned 64bit integer", src);
 			return -1;
 		}
 		dst->integer64 = i;
@@ -903,7 +903,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 			date = mktime(&tm);
 
 		} else if (fr_get_time(src, &date) < 0) {
-			fr_strerror_printf("failed to parse time string \"%s\"", src);
+			fr_strerror_printf("failed to parse time string '%s'", src);
 			return -1;
 		}
 
@@ -914,7 +914,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 
 	case PW_TYPE_IFID:
 		if (ifid_aton(src, (void *) dst->ifid) == NULL) {
-			fr_strerror_printf("Failed to parse interface-id string \"%s\"", src);
+			fr_strerror_printf("Failed to parse interface-id string '%s'", src);
 			return -1;
 		}
 		break;
@@ -934,7 +934,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 			uint64_t int64 = (uint64_t) atoll(src);
 
 			if (int64 > UINT64_C(0xffffffffffff)) {
-				fr_strerror_printf("Ethernet address \"%s\" is larger than 48 bits", src);
+				fr_strerror_printf("Ethernet address '%s' is larger than 48 bits", src);
 				return -1;
 			}
 
@@ -963,7 +963,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 				c1 = c2 = NULL;
 			}
 			if (!c1 || !c2 || (p_len >= sizeof(dst->ether))) {
-				fr_strerror_printf("failed to parse Ethernet address \"%s\"", src);
+				fr_strerror_printf("failed to parse Ethernet address '%s'", src);
 				return -1;
 			}
 			dst->ether[p_len] = ((c1-hextab)<<4) + (c2-hextab);
@@ -976,7 +976,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 		 *	valid bytes while leaving the rest untouched.
 		 */
 		if (p_len != sizeof(dst->ether)) {
-			fr_strerror_printf("Ethernet address \"%s\" is too short, expected 6 octets, got %zu",
+			fr_strerror_printf("Ethernet address '%s' is too short, expected 6 octets, got %zu",
 					   src, p_len);
 			return -1;
 		}

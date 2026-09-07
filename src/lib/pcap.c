@@ -296,7 +296,7 @@ int fr_pcap_apply_filter(fr_pcap_t *pcap, char const *expression)
 
 	if (pcap->type == PCAP_INTERFACE_IN) {
 		if (pcap_lookupnet(pcap->name, &net, &mask, pcap->errbuf) < 0) {
-			fr_strerror_printf("Failed getting IP for interface \"%s\", using defaults: %s",
+			fr_strerror_printf("Failed getting IP for interface '%s', using defaults: %s",
 					   pcap->name, pcap->errbuf);
 		}
 	}

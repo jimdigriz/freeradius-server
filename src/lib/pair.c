@@ -537,17 +537,17 @@ void fr_pair_validate_debug(TALLOC_CTX *ctx, VALUE_PAIR const *failed[2])
 
 	if (!list) {
 		if (!filter) return;
-		fr_strerror_printf("Attribute \"%s\" not found in list", filter->da->name);
+		fr_strerror_printf("Attribute '%s' not found in list", filter->da->name);
 		return;
 	}
 
 	if (!filter || (filter->da != list->da)) {
-		fr_strerror_printf("Attribute \"%s\" not found in filter", list->da->name);
+		fr_strerror_printf("Attribute '%s' not found in filter", list->da->name);
 		return;
 	}
 
 	if (!TAG_EQ(filter->tag, list->tag)) {
-		fr_strerror_printf("Attribute \"%s\" tag \"%i\" didn't match filter tag \"%i\"",
+		fr_strerror_printf("Attribute '%s' tag \"%i\" didn't match filter tag '%i'",
 				   list->da->name, list->tag, filter->tag);
 		return;
 	}
@@ -556,7 +556,7 @@ void fr_pair_validate_debug(TALLOC_CTX *ctx, VALUE_PAIR const *failed[2])
 	value = vp_aprints_value(ctx, list, '"');
 	str = vp_aprints(ctx, filter, '"');
 
-	fr_strerror_printf("Attribute value \"%s\" didn't match filter: %s", value, str);
+	fr_strerror_printf("Attribute value '%s' didn't match filter: %s", value, str);
 
 	talloc_free(str);
 	talloc_free(value);
@@ -1385,7 +1385,7 @@ parse_value:
 
 		da = dict_attrbytype(vp->da->attr, vp->da->vendor, type);
 		if (!da) {
-			fr_strerror_printf("Cannot find %s variant of attribute \"%s\"",
+			fr_strerror_printf("Cannot find %s variant of attribute '%s'",
 					   fr_int2str(dict_attr_types, type, "<INVALID>"), vp->da->name);
 			return -1;
 		}
@@ -1504,8 +1504,8 @@ static VALUE_PAIR *fr_pair_make_unknown(TALLOC_CTX *ctx,
 	 *	Unknown attributes MUST be of type 'octets'
 	 */
 	if (strncasecmp(value, "0x", 2) != 0) {
-		fr_strerror_printf("Unknown attribute \"%s\" requires a hex "
-				   "string, not \"%s\"", attribute, value);
+		fr_strerror_printf("Unknown attribute '%s' requires a hex "
+				   "string, not '%s'", attribute, value);
 		talloc_free(vp);
 		return NULL;
 	}
@@ -2533,14 +2533,14 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 		TALLOC_CTX *parent;
 
 		if (!talloc_get_type(vp->data.ptr, uint8_t)) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" data buffer type should be "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' data buffer type should be "
 				     "uint8_t but is %s\n", file, line, vp->da->name, talloc_get_name(vp->data.ptr));
 			(void) talloc_get_type_abort(vp->data.ptr, uint8_t);
 		}
 
 		len = talloc_array_length(vp->vp_octets);
 		if (vp->vp_length > len) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" length %zu is greater than "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' length %zu is greater than "
 				     "uint8_t data buffer length %zu\n", file, line, vp->da->name, vp->vp_length, len);
 			fr_assert(0);
 			fr_exit_now(1);
@@ -2548,7 +2548,7 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 
 		parent = talloc_parent(vp->data.ptr);
 		if (parent != vp) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" char buffer is not "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' char buffer is not "
 				     "parented by VALUE_PAIR %p, instead parented by %p (%s)\n",
 				     file, line, vp->da->name,
 				     vp, parent, parent ? talloc_get_name(parent) : "NULL");
@@ -2564,21 +2564,21 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 		TALLOC_CTX *parent;
 
 		if (!talloc_get_type(vp->data.ptr, char)) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" data buffer type should be "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' data buffer type should be "
 				     "char but is %s\n", file, line, vp->da->name, talloc_get_name(vp->data.ptr));
 			(void) talloc_get_type_abort(vp->data.ptr, char);
 		}
 
 		len = (talloc_array_length(vp->vp_strvalue) - 1);
 		if (vp->vp_length > len) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" length %zu is greater than "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' length %zu is greater than "
 				     "char buffer length %zu\n", file, line, vp->da->name, vp->vp_length, len);
 			fr_assert(0);
 			fr_exit_now(1);
 		}
 
 		if (vp->vp_strvalue[vp->vp_length] != '\0') {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" char buffer not \\0 "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' char buffer not \\0 "
 				     "terminated\n", file, line, vp->da->name);
 			fr_assert(0);
 			fr_exit_now(1);
@@ -2586,7 +2586,7 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 
 		parent = talloc_parent(vp->data.ptr);
 		if (parent != vp) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR \"%s\" char buffer is not "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR '%s' char buffer is not "
 				     "parented by VALUE_PAIR %p, instead parented by %p (%s)\n",
 				     file, line, vp->da->name,
 				     vp, parent, parent ? talloc_get_name(parent) : "NULL");
@@ -2610,7 +2610,7 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 		 */
 		da = dict_attrbyname(vp->da->name);
 		if (!da) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR attribute %p \"%s\" (%s) "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR attribute %p '%s' (%s) "
 				     "not found in global dictionary",
 				     file, line, vp->da, vp->da->name,
 				     fr_int2str(dict_attr_types, vp->da->type, "<INVALID>"));
@@ -2621,7 +2621,7 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 		if (da->type == PW_TYPE_COMBO_IP_ADDR) {
 			da = dict_attrbytype(vp->da->attr, vp->da->vendor, vp->da->type);
 			if (!da) {
-				FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR attribute %p \"%s\" "
+				FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR attribute %p '%s' "
 					     "variant (%s) not found in global dictionary",
 					     file, line, vp->da, vp->da->name,
 					     fr_int2str(dict_attr_types, vp->da->type, "<INVALID>"));
@@ -2633,8 +2633,8 @@ inline void fr_pair_verify(char const *file, int line, VALUE_PAIR const *vp)
 
 		if (da != vp->da) {
 			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: VALUE_PAIR "
-				     "dictionary pointer %p \"%s\" (%s) "
-				     "and global dictionary pointer %p \"%s\" (%s) differ",
+				     "dictionary pointer %p '%s' (%s) "
+				     "and global dictionary pointer %p '%s' (%s) differ",
 				     file, line, vp->da, vp->da->name,
 				     fr_int2str(dict_attr_types, vp->da->type, "<INVALID>"),
 				     da, da->name, fr_int2str(dict_attr_types, da->type, "<INVALID>"));
@@ -2660,7 +2660,7 @@ void fr_pair_list_verify(char const *file, int line, TALLOC_CTX *expected, VALUE
 
 		parent = talloc_parent(vp);
 		if (expected && (parent != expected)) {
-			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: Expected VALUE_PAIR \"%s\" to be parented "
+			FR_FAULT_LOG("CONSISTENCY CHECK FAILED %s[%u]: Expected VALUE_PAIR '%s' to be parented "
 				     "by %p (%s) name %s, instead parented by %p (%s)\n",
 				     file, line, vp->da->name,
 				     expected, talloc_get_name(expected), name,

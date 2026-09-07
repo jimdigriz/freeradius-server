@@ -139,7 +139,7 @@ int fr_bool_auto_parse(CONF_PAIR *cp, fr_bool_auto_t *out, char const *str)
 		return -1;
 	}
 
-	cf_log_err(cf_pair_to_item(cp), "Invalid value for \"%s\"", cf_pair_attr(cp));
+	cf_log_err(cf_pair_to_item(cp), "Invalid value for '%s'", cf_pair_attr(cp));
 	return -1;
 }
 
@@ -425,7 +425,7 @@ static ssize_t xlat_config(UNUSED void *instance, REQUEST *request, char const *
 	ci = cf_reference_item(request->root->config,
 			       request->root->config, buffer);
 	if (!ci || !cf_item_is_pair(ci)) {
-		REDEBUG("Config item \"%s\" does not exist", fmt);
+		REDEBUG("Config item '%s' does not exist", fmt);
 		*out = '\0';
 		return -1;
 	}
@@ -505,7 +505,7 @@ static ssize_t xlat_getclient(UNUSED void *instance, REQUEST *request, char cons
 
 	strlcpy(buffer, p, (q + 1) - p);
 	if (fr_pton(&ip, buffer, -1, AF_UNSPEC, false) < 0) {
-		REDEBUG("\"%s\" is not a valid IPv4 or IPv6 address", buffer);
+		REDEBUG("'%s' is not a valid IPv4 or IPv6 address", buffer);
 		goto error;
 	}
 
@@ -513,7 +513,7 @@ static ssize_t xlat_getclient(UNUSED void *instance, REQUEST *request, char cons
 
 	client = client_find(NULL, &ip, IPPROTO_IP);
 	if (!client) {
-		RDEBUG("No client found with IP \"%s\"", buffer);
+		RDEBUG("No client found with IP '%s'", buffer);
 		*out = '\0';
 		return 0;
 	}
@@ -588,7 +588,7 @@ static ssize_t xlat_listen_common(REQUEST *request, rad_listen_t *listen,
 			}
 		}
 
-		RDEBUG("Unknown TLS attribute \"%s\"", fmt);
+		RDEBUG("Unknown TLS attribute '%s'", fmt);
 		*out = '\0';
 		return 0;
 	}
@@ -612,7 +612,7 @@ static ssize_t xlat_listen_common(REQUEST *request, rad_listen_t *listen,
 
 	cp = cf_pair_find(listen->cs, fmt);
 	if (!cp || !(value = cf_pair_value(cp))) {
-		RDEBUG("Listener does not contain config item \"%s\"", fmt);
+		RDEBUG("Listener does not contain config item '%s'", fmt);
 		*out = '\0';
 		return 0;
 	}
@@ -1166,7 +1166,7 @@ do {\
 
 		} else if (default_log.dst == L_DST_FILES) {
 			if (!main_config.log_file) {
-				fprintf(stderr, "%s: Error: Specified \"files\" as a log destination, but no log filename was given!\n",
+				fprintf(stderr, "%s: Error: Specified 'files' as a log destination, but no log filename was given!\n",
 					main_config.name);
 				cf_file_free(cs);
 				return -1;

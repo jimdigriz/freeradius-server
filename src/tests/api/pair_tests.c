@@ -1380,19 +1380,19 @@ static void test_fr_pair_validate_debug(void)
 	failed[0] = filter;
 	failed[1] = list;
 	fr_pair_validate_debug(autofree, failed);
-	TEST_CHECK_STRCMP(fr_strerror(), "Attribute value \"2\" didn't match filter: Tmp-Integer-0 == 1");
+	TEST_CHECK_STRCMP(fr_strerror(), "Attribute value '2' didn't match filter: Tmp-Integer-0 == 1");
 
 	TEST_CASE("An attribute missing from the list");
 	failed[0] = filter;
 	failed[1] = NULL;
 	fr_pair_validate_debug(autofree, failed);
-	TEST_CHECK_STRCMP(fr_strerror(), "Attribute \"Tmp-Integer-0\" not found in list");
+	TEST_CHECK_STRCMP(fr_strerror(), "Attribute 'Tmp-Integer-0' not found in list");
 
 	TEST_CASE("An attribute missing from the filter");
 	failed[0] = NULL;
 	failed[1] = list;
 	fr_pair_validate_debug(autofree, failed);
-	TEST_CHECK_STRCMP(fr_strerror(), "Attribute \"Tmp-Integer-0\" not found in filter");
+	TEST_CHECK_STRCMP(fr_strerror(), "Attribute 'Tmp-Integer-0' not found in filter");
 
 	talloc_free(filter);
 	talloc_free(list);
