@@ -140,6 +140,9 @@ static size_t list_len(VALUE_PAIR *head)
 
 /*
  *	Allocation
+ *
+ *	All checks for functions which allocate pairs must use TEST_ASSERT and not TEST_CHECK.
+ *	If TEST_CHECK fails, the code continues, and dereferences a NULL pointer.
  */
 static void test_fr_pair_alloc(void)
 {
@@ -162,8 +165,7 @@ static void test_fr_pair_afrom_da(void)
 
 	TEST_CASE("Allocation using fr_pair_afrom_da");
 	vp = fr_pair_afrom_da(autofree, da_string);
-	TEST_CHECK(vp != NULL);
-	if (!vp) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK(vp->da == da_string);
 	TEST_CHECK(vp->op == T_OP_EQ);
@@ -183,8 +185,7 @@ static void test_fr_pair_afrom_num(void)
 
 	TEST_CASE("Allocation using fr_pair_afrom_num");
 	vp = fr_pair_afrom_num(autofree, 1800, 0);
-	TEST_CHECK(vp != NULL);
-	if (!vp) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK(vp->da == da_string);
 	TEST_CHECK(vp->da->type == PW_TYPE_STRING);
@@ -213,8 +214,7 @@ static void test_fr_pair_to_unknown(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	TEST_CHECK(vp != NULL);
-	if (!vp) return;
+	TEST_ASSERT(vp != NULL);
 
 	vp->vp_integer = 12345;
 
@@ -232,8 +232,7 @@ static void test_fr_pair_list_free(void)
 	VALUE_PAIR *head;
 
 	head = test_list_alloc(autofree);
-	TEST_CHECK(head != NULL);
-	if (!head) return;
+	TEST_ASSERT(head != NULL);
 
 	TEST_CHECK_LEN(list_len(head), 3);
 
@@ -428,15 +427,16 @@ static void test_fr_pair_prepend(void)
 	VALUE_PAIR	*first, *second;
 
 	first = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(first != NULL)) return;
+	TEST_ASSERT(first != NULL);
 	fr_pair_add(&head, first);
 
 	second = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(second != NULL)) return;
+	TEST_ASSERT(second != NULL);
 	fr_pair_prepend(&head, second);
 
 	/* Prepending moves the head */
 	TEST_CHECK(head == second);
+	TEST_ASSERT(head != NULL);
 	TEST_ASSERT(head->next == first);
 	TEST_CHECK_LEN(list_len(head), 2);
 
@@ -449,7 +449,7 @@ static void test_fr_pair_find_by_num(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	vp = fr_pair_find_by_num(head, 1810, 0, TAG_ANY);
 	TEST_CHECK(vp != NULL);
@@ -522,7 +522,7 @@ static void test_fr_pair_delete_by_num(void)
 	VALUE_PAIR *head;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	fr_pair_delete_by_num(&head, 1810, 0, TAG_ANY);
 
@@ -541,7 +541,7 @@ static void test_fr_pair_delete_by_da(void)
 	VALUE_PAIR *head;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	/* Deleting the head must move the caller's head pointer */
 	fr_pair_delete_by_da(&head, da_string);
@@ -559,7 +559,7 @@ static void test_fr_pair_delete(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	vp = fr_pair_find_by_da(head, da_integer, TAG_ANY);
 	TEST_ASSERT(vp != NULL);
@@ -578,7 +578,7 @@ static void test_fr_pair_replace(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
 	TEST_ASSERT(vp != NULL);
@@ -606,7 +606,7 @@ static void test_cursor_iteration(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	TEST_CASE("fr_cursor_init returns the first pair");
 	vp = fr_cursor_init(&cursor, &head);
@@ -642,7 +642,7 @@ static void test_cursor_next_by_num(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	fr_cursor_init(&cursor, &head);
 
@@ -663,7 +663,7 @@ static void test_cursor_next_by_da(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	fr_cursor_init(&cursor, &head);
 
@@ -757,7 +757,7 @@ static void test_cursor_insert(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	fr_cursor_init(&cursor, &head);
 
@@ -779,7 +779,7 @@ static void test_cursor_merge(void)
 	vp_cursor_t	cursor;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	other = test_list_alloc(autofree);
 	if (!TEST_CHECK(other != NULL)) return;
@@ -800,7 +800,7 @@ static void test_cursor_remove(void)
 	VALUE_PAIR	*vp;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	fr_cursor_init(&cursor, &head);
 	vp = fr_cursor_remove(&cursor);
@@ -824,7 +824,7 @@ static void test_cursor_replace(void)
 	VALUE_PAIR	*vp, *old;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	vp = fr_pair_afrom_da(autofree, da_integer64);
 	TEST_ASSERT(vp != NULL);
@@ -847,7 +847,7 @@ static void test_cursor_copy(void)
 	vp_cursor_t	a, b;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	fr_cursor_init(&a, &head);
 	fr_cursor_next(&a);
@@ -894,7 +894,7 @@ static void test_fr_pair_list_copy(void)
 	VALUE_PAIR	*head, *copy;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	copy = fr_pair_list_copy(autofree, head);
 	TEST_CHECK(copy != NULL);
@@ -917,7 +917,7 @@ static void test_fr_pair_list_copy_by_num(void)
 	VALUE_PAIR	*head, *copy;
 
 	head = test_list_alloc(autofree);
-	if (!TEST_CHECK(head != NULL)) return;
+	TEST_ASSERT(head != NULL);
 
 	copy = fr_pair_list_copy_by_num(autofree, head, 1810, 0, TAG_ANY);
 	TEST_CHECK(copy != NULL);
@@ -1323,8 +1323,8 @@ static void test_fr_pair_list_afrom_file(void)
 	char const	*path = "build/tests/api/pair_tests_input.txt";
 
 	fp = fopen(path, "w");
-	if (!TEST_CHECK(fp != NULL)) {
-		TEST_MSG("Could not create %s", path);
+	if (fp) {
+		TEST_MSG("Could not create %s - %s", path, strerror(errno));
 		return;
 	}
 	fprintf(fp, "Tmp-Integer-0 = 1\n");
@@ -1334,7 +1334,10 @@ static void test_fr_pair_list_afrom_file(void)
 	fclose(fp);
 
 	fp = fopen(path, "r");
-	if (!TEST_CHECK(fp != NULL)) return;
+	if (!fp) {
+		TEST_MSG("Could not open %s - %s", path, strerror(errno));
+		return;
+	}
 
 	TEST_CASE("A blank line ends the entry, and the file is not yet finished");
 	TEST_CHECK_RET(fr_pair_list_afrom_file(autofree, &head, fp, &done), 0);
@@ -1357,7 +1360,7 @@ static void test_fr_pair_list_afrom_file(void)
 	if (head) TEST_CHECK(head->da == da_integer1);
 
 	fr_pair_list_free(&head);
-	if (fp) fclose(fp);
+	fclose(fp);
 	unlink(path);
 }
 
@@ -1439,8 +1442,9 @@ static void test_fr_pair_cmp_op(void)
 	VALUE_PAIR *a, *b;
 
 	a = fr_pair_afrom_da(autofree, da_integer);
+	TEST_ASSERT(a != NULL);
 	b = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK((a != NULL) && (b != NULL))) return;
+	TEST_ASSERT(b != NULL);
 
 	a->vp_integer = 1;
 	b->vp_integer = 2;
@@ -1590,8 +1594,7 @@ static void test_fr_pair_make_tagged(void)
 
 	TEST_CASE("A tag in the attribute name is parsed out");
 	vp = fr_pair_make(autofree, &head, "Tunnel-Type:2", "VLAN", T_OP_EQ);
-	TEST_CHECK(vp != NULL);
-	if (!vp) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK(vp->da == da_tagged);
 	TEST_CHECK(vp->tag == 2);
