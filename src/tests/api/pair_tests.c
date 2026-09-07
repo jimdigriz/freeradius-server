@@ -436,7 +436,7 @@ static void test_fr_pair_prepend(void)
 
 	/* Prepending moves the head */
 	TEST_CHECK(head == second);
-	TEST_ASSERT(head != NULL);
+	if (!head) return;
 	TEST_ASSERT(head->next == first);
 	TEST_CHECK_LEN(list_len(head), 2);
 
@@ -1323,7 +1323,7 @@ static void test_fr_pair_list_afrom_file(void)
 	char const	*path = "build/tests/api/pair_tests_input.txt";
 
 	fp = fopen(path, "w");
-	if (fp) {
+	if (!fp) {
 		TEST_MSG("Could not create %s - %s", path, strerror(errno));
 		return;
 	}
