@@ -1413,11 +1413,12 @@ parse_value:
  * @param ipv6_prefix dictionary attribute to use for an IPv6 prefix.
  * @return NULL on error, or new VALUE_PAIR.
  */
-VALUE_PAIR *fr_pair_afrom_ip_str(TALLOC_CTX *ctx, char const *value, DICT_ATTR *ipv4, DICT_ATTR *ipv6,
-				 DICT_ATTR *ipv4_prefix, DICT_ATTR *ipv6_prefix)
+VALUE_PAIR *fr_pair_afrom_ip_str(TALLOC_CTX *ctx, char const *value,
+				 DICT_ATTR const *ipv4, DICT_ATTR const *ipv6,
+				 DICT_ATTR const *ipv4_prefix, DICT_ATTR const *ipv6_prefix)
 {
 	VALUE_PAIR *vp;
-	DICT_ATTR *da = NULL;
+	DICT_ATTR const *da = NULL;
 
 	if (!fr_assert(ipv4 || ipv6 || ipv4_prefix || ipv6_prefix)) {
 		return NULL;

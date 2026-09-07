@@ -682,7 +682,8 @@ void		fr_pair_list_move_by_num(TALLOC_CTX *ctx, VALUE_PAIR **to, VALUE_PAIR **fr
 void		fr_pair_list_mcopy_by_num(TALLOC_CTX *ctx, VALUE_PAIR **to, VALUE_PAIR **from,
 					  unsigned int attr, unsigned int vendor, int8_t tag);
 VALUE_PAIR	*fr_pair_afrom_ip_str(TALLOC_CTX *ctx, char const *value,
-			     DICT_ATTR *ipv4, DICT_ATTR *ipv6, DICT_ATTR *ipv4_prefix, DICT_ATTR *ipv6_prefix);
+				      DICT_ATTR const *ipv4, DICT_ATTR const *ipv6,
+				      DICT_ATTR const *ipv4_prefix, DICT_ATTR const *ipv6_prefix);
 int		fr_pair_value_from_str(VALUE_PAIR *vp, char const *value, size_t len);
 VALUE_PAIR	*fr_pair_make(TALLOC_CTX *ctx, VALUE_PAIR **vps, char const *attribute, char const *value, FR_TOKEN op);
 int 		fr_pair_mark_xlat(VALUE_PAIR *vp, char const *value);
