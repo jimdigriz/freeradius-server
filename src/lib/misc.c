@@ -1220,7 +1220,7 @@ char const *ip_ntoh(fr_ipaddr_t const *src, char *dst, size_t cnt)
 
 	if ((error = getnameinfo((struct sockaddr *)&ss, salen, dst, cnt, NULL, 0,
 				 NI_NUMERICHOST | NI_NUMERICSERV)) != 0) {
-		fr_strerror_printf("ip_ntoh: %s", gai_strerror(error));
+		fr_strerror_printf("Failed looking up IP address - %s", gai_strerror(error));
 		return NULL;
 	}
 	return dst;
