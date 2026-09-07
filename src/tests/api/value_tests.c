@@ -925,6 +925,7 @@ static void test_aprints_integer(void)
 
 	out = value_data_aprints(autofree, PW_TYPE_INTEGER, NULL, &data, 4, '\0');
 	TEST_ASSERT(out != NULL);
+	if (!out) return;
 
 	TEST_CHECK_STRCMP(out, "12345");
 	talloc_free(out);
@@ -953,6 +954,7 @@ static void test_aprints_octets(void)
 
 	out = value_data_aprints(autofree, PW_TYPE_OCTETS, NULL, &data, 4, '\0');
 	TEST_ASSERT(out != NULL);
+	if (!out) return;
 
 	TEST_CHECK_STRCMP(out, "0xdeadbeef");
 	talloc_free(out);
@@ -1103,6 +1105,7 @@ static void test_aprints_enum_name(void)
 
 	out = value_data_aprints(autofree, PW_TYPE_INTEGER, da_enum, &data, 4, '\0');
 	TEST_ASSERT(out != NULL);
+	if (!out) return;
 
 	TEST_CHECK_STRCMP(out, "Login-User");
 	talloc_free(out);
@@ -1663,6 +1666,7 @@ static void test_aprints_boolean(void)
 	data.boolean = true;
 	out = value_data_aprints(autofree, PW_TYPE_BOOLEAN, NULL, &data, 1, '\0');
 	TEST_ASSERT(out != NULL);
+	if (!out) return;
 	TEST_CHECK_STRCMP(out, "yes");
 
 	TEST_CASE("and prints() says the same");
@@ -1673,6 +1677,7 @@ static void test_aprints_boolean(void)
 	data.boolean = false;
 	out = value_data_aprints(autofree, PW_TYPE_BOOLEAN, NULL, &data, 1, '\0');
 	TEST_ASSERT(out != NULL);
+	if (!out) return;
 	TEST_CHECK_STRCMP(out, "no");
 
 	value_data_prints(buff, sizeof(buff), PW_TYPE_BOOLEAN, NULL, &data, 1, '\0');
@@ -1971,6 +1976,7 @@ static void test_prints_quoting_vs_aprints(void)
 
 	out = value_data_aprints(autofree, PW_TYPE_STRING, NULL, &data, 12, '"');
 	TEST_ASSERT(out != NULL);
+	if (!out) return;
 	TEST_CHECK_STRCMP(out, "he said \\\"hi\\\"");
 	talloc_free(out);
 }
