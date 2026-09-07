@@ -889,13 +889,13 @@ int fr_log_talloc_report(TALLOC_CTX *ctx)
 
 	fd = dup(fr_fault_log_fd);
 	if (fd < 0) {
-		fr_strerror_printf("Couldn't write memory report, failed to dup log fd: %s", fr_syserror(errno));
+		fr_strerror_printf("Failed write memory report, error dup'ing log fd: %s", fr_syserror(errno));
 		return -1;
 	}
 	log = fdopen(fd, "w");
 	if (!log) {
 		close(fd);
-		fr_strerror_printf("Couldn't write memory report, fdopen failed: %s", fr_syserror(errno));
+		fr_strerror_printf("Failed write memory report, error calling fdopen : %s", fr_syserror(errno));
 		return -1;
 	}
 

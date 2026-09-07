@@ -410,7 +410,7 @@ static int fr_server_domain_socket_perm(char const *path, uid_t uid, gid_t gid)
 			talloc_free(user);
 			goto error;
 		}
-		fr_strerror_printf("Can't open directory \"%s\": %s.  Must be created manually, or modified, "
+		fr_strerror_printf("Failed opening directory \"%s\": %s.  Must be created manually, or modified, "
 				   "with permissions that allow writing by user %s or group %s", dir,
 				   user->pw_name, group->gr_name, fr_syserror(errno));
 		talloc_free(user);
@@ -530,7 +530,7 @@ static int fr_server_domain_socket_perm(char const *path, uid_t uid, gid_t gid)
 
 	name = strrchr(path, FR_DIR_SEP);
 	if (!name) {
-		fr_strerror_printf("Can't determine socket name");
+		fr_strerror_printf("Failed to determine socket name from \"%s\"", path);
 		goto error;
 	}
 	name++;

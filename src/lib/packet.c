@@ -691,7 +691,7 @@ bool fr_packet_list_id_alloc(fr_packet_list_t *pl, int proto,
 
 	src_any = fr_inaddr_any(&request->src_ipaddr);
 	if (src_any < 0) {
-		fr_strerror_printf("Can't check src_ipaddr");
+		fr_strerror_printf("Failed check src_ipaddr");
 		return false;
 	}
 

@@ -41,7 +41,7 @@ int value_data_cmp(PW_TYPE a_type, value_data_t const *a, size_t a_len,
 	int compare = 0;
 
 	if (a_type != b_type) {
-		fr_strerror_printf("Can't compare values of different types");
+		fr_strerror_printf("Cannot compare values of different types");
 		return -2;
 	}
 
