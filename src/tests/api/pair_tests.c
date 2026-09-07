@@ -147,8 +147,7 @@ static void test_fr_pair_alloc(void)
 
 	TEST_CASE("Allocation using fr_pair_alloc");
 	vp = fr_pair_alloc(autofree);
-	TEST_CHECK(vp != NULL);
-	if (!vp) return;
+	TEST_ASSERT(vp != NULL);
 
 	/* A bare pair has no dictionary attribute yet */
 	TEST_CHECK(vp->da == NULL);
@@ -252,7 +251,7 @@ static void test_fr_pair_value_strcpy(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	fr_pair_value_strcpy(vp, "hello");
 	TEST_CHECK_STRCMP(vp->vp_strvalue, "hello");
@@ -288,7 +287,7 @@ static void test_fr_pair_value_strsteal(void)
 	char		*str;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	str = talloc_strdup(autofree, "stolen");
 	fr_pair_value_strsteal(vp, str);
@@ -306,7 +305,7 @@ static void test_fr_pair_value_sprintf(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	fr_pair_value_sprintf(vp, "%s-%i", "test", 42);
 	TEST_CHECK_STRCMP(vp->vp_strvalue, "test-42");
@@ -320,7 +319,7 @@ static void test_fr_pair_value_memcpy(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_octets);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	fr_pair_value_memcpy(vp, test_octets, sizeof(test_octets));
 	TEST_CHECK_LEN(vp->vp_length, sizeof(test_octets));
@@ -338,9 +337,10 @@ static void test_fr_pair_value_memsteal(void)
 	uint8_t		*buff;
 
 	vp = fr_pair_afrom_da(autofree, da_octets);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	buff = talloc_array(autofree, uint8_t, 4);
+	TEST_ASSERT(buff != NULL);
 	memcpy(buff, test_octets, 4);
 
 	fr_pair_value_memsteal(vp, buff);
@@ -356,7 +356,7 @@ static void test_fr_pair_value_from_str(void)
 
 	TEST_CASE("Parsing an integer from a string");
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK_RET(fr_pair_value_from_str(vp, "54321", -1), 0);
 	TEST_CHECK(vp->vp_integer == 54321);
@@ -364,7 +364,7 @@ static void test_fr_pair_value_from_str(void)
 
 	TEST_CASE("Parsing an IP address from a string");
 	vp = fr_pair_afrom_da(autofree, da_ipaddr);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK_RET(fr_pair_value_from_str(vp, "192.0.2.1", -1), 0);
 	TEST_CHECK(vp->vp_ipaddr == htonl(0xc0000201));
@@ -372,7 +372,7 @@ static void test_fr_pair_value_from_str(void)
 
 	TEST_CASE("Parsing octets from a hex string");
 	vp = fr_pair_afrom_da(autofree, da_octets);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK_RET(fr_pair_value_from_str(vp, "0xdeadbeef", -1), 0);
 	TEST_CHECK_LEN(vp->vp_length, 4);
@@ -385,7 +385,7 @@ static void test_fr_pair_mark_xlat(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CASE("Marking a pair for later expansion");
 	TEST_CHECK_RET(fr_pair_mark_xlat(vp, "%{User-Name}"), 0);
@@ -406,13 +406,13 @@ static void test_fr_pair_add(void)
 	VALUE_PAIR	*vp;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	TEST_CHECK(head == vp);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	/* Added to the tail, so the head does not move */
@@ -487,13 +487,13 @@ static void test_find_by_num_tagged(void)
 	VALUE_PAIR	*vp;
 
 	vp = fr_pair_afrom_da(autofree, da_tagged);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->tag = 1;
 	vp->vp_integer = 1;
 	fr_pair_add(&head, vp);
 
 	vp = fr_pair_afrom_da(autofree, da_tagged);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->tag = 2;
 	vp->vp_integer = 2;
 	fr_pair_add(&head, vp);
@@ -562,7 +562,7 @@ static void test_fr_pair_delete(void)
 	if (!TEST_CHECK(head != NULL)) return;
 
 	vp = fr_pair_find_by_da(head, da_integer, TAG_ANY);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	fr_pair_delete(&head, vp);
 
@@ -581,7 +581,7 @@ static void test_fr_pair_replace(void)
 	if (!TEST_CHECK(head != NULL)) return;
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 999;
 
 	fr_pair_replace(&head, vp);
@@ -688,14 +688,14 @@ static void test_cursor_next_by_da_repeated(void)
 
 	for (i = 0; i < 3; i++) {
 		vp = fr_pair_afrom_da(autofree, da_string1);
-		if (!TEST_CHECK(vp != NULL)) return;
+		TEST_ASSERT(vp != NULL);
 		fr_pair_value_sprintf(vp, "value-%i", i);
 		fr_pair_add(&head, vp);
 	}
 
 	/* One pair of a different attribute, to prove the filter works */
 	vp = fr_pair_afrom_da(autofree, da_integer1);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	TEST_CHECK_LEN(list_len(head), 4);
@@ -734,12 +734,12 @@ static void test_delete_by_num_repeated(void)
 
 	for (i = 0; i < 3; i++) {
 		vp = fr_pair_afrom_da(autofree, da_string1);
-		if (!TEST_CHECK(vp != NULL)) return;
+		TEST_ASSERT(vp != NULL);
 		fr_pair_add(&head, vp);
 	}
 
 	vp = fr_pair_afrom_da(autofree, da_integer1);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	fr_pair_delete_by_num(&head, da_string1->attr, da_string1->vendor, TAG_ANY);
@@ -762,7 +762,7 @@ static void test_cursor_insert(void)
 	fr_cursor_init(&cursor, &head);
 
 	vp = fr_pair_afrom_da(autofree, da_integer64);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer64 = 1;
 
 	fr_cursor_insert(&cursor, vp);
@@ -827,7 +827,7 @@ static void test_cursor_replace(void)
 	if (!TEST_CHECK(head != NULL)) return;
 
 	vp = fr_pair_afrom_da(autofree, da_integer64);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	fr_cursor_init(&cursor, &head);
 	old = fr_cursor_replace(&cursor, vp);
@@ -868,7 +868,7 @@ static void test_fr_pair_copy(void)
 	VALUE_PAIR	*vp, *copy;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_value_strcpy(vp, test_string);
 
 	copy = fr_pair_copy(autofree, vp);
@@ -940,10 +940,10 @@ static void test_fr_pair_steal(void)
 	TALLOC_CTX	*ctx;
 
 	ctx = talloc_init("pair_steal");
-	if (!TEST_CHECK(ctx != NULL)) return;
+	TEST_ASSERT(ctx != NULL);
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK(talloc_parent(vp) == autofree);
 
@@ -1033,15 +1033,15 @@ static void test_fr_pair_list_sort(void)
 
 	/* Build the list out of order: 1830, 1810, 1800 */
 	vp = fr_pair_afrom_da(autofree, da_octets);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	fr_pair_list_sort(&head, fr_pair_cmp_by_da_tag);
@@ -1067,13 +1067,13 @@ static void test_fr_pair_validate(void)
 	TEST_CHECK(fr_pair_validate(NULL, NULL, NULL) == true);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 12345;
 	vp->op = T_OP_CMP_EQ;
 	fr_pair_add(&filter, vp);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 12345;
 	fr_pair_add(&list, vp);
 
@@ -1096,7 +1096,7 @@ static void test_fr_pair_validate_relaxed(void)
 
 	/* The filter asks for one attribute */
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 12345;
 	vp->op = T_OP_CMP_EQ;
 	fr_pair_add(&filter, vp);
@@ -1407,13 +1407,13 @@ static void test_fr_pair_validate_failed_pairs(void)
 	VALUE_PAIR const *failed[2] = { NULL, NULL };
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 1;
 	vp->op = T_OP_CMP_EQ;
 	fr_pair_add(&filter, vp);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 999;
 	fr_pair_add(&list, vp);
 
@@ -1473,7 +1473,7 @@ static void test_fr_pair_to_unknown_idempotent(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CHECK_RET(fr_pair_to_unknown(vp), 0);
 	TEST_CHECK(vp->da->flags.is_unknown);
@@ -1491,12 +1491,12 @@ static void test_fr_pair_list_move_replace(void)
 	VALUE_PAIR	*vp;
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 1;
 	fr_pair_add(&to, vp);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	vp->vp_integer = 2;
 	vp->op = T_OP_SET;
 	fr_pair_add(&from, vp);
@@ -1519,12 +1519,12 @@ static void test_delete_by_da_repeated(void)
 
 	for (i = 0; i < 3; i++) {
 		vp = fr_pair_afrom_da(autofree, da_string1);
-		if (!TEST_CHECK(vp != NULL)) return;
+		TEST_ASSERT(vp != NULL);
 		fr_pair_add(&head, vp);
 	}
 
 	vp = fr_pair_afrom_da(autofree, da_integer1);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 	fr_pair_add(&head, vp);
 
 	fr_pair_delete_by_da(&head, da_string1);
@@ -1558,7 +1558,7 @@ static void test_cursor_insert_into_empty(void)
 	fr_cursor_init(&cursor, &head);
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CASE("Inserting into an empty list sets the head");
 	fr_cursor_insert(&cursor, vp);
@@ -1573,7 +1573,7 @@ static void test_fr_pair_value_from_str_bad(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	TEST_CASE("A value which does not parse is an error");
 	TEST_CHECK(fr_pair_value_from_str(vp, "not-a-number", -1) < 0);
