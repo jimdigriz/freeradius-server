@@ -271,7 +271,7 @@ static void test_fr_pair_value_bstrncpy(void)
 	VALUE_PAIR *vp;
 
 	vp = fr_pair_afrom_da(autofree, da_string);
-	if (!TEST_CHECK(vp != NULL)) return;
+	TEST_ASSERT(vp != NULL);
 
 	/* Copy a fixed length, ignoring any NUL inside it */
 	fr_pair_value_bstrncpy(vp, "hello world", 5);
@@ -437,7 +437,7 @@ static void test_fr_pair_prepend(void)
 
 	/* Prepending moves the head */
 	TEST_CHECK(head == second);
-	TEST_CHECK(head->next == first);
+	TEST_ASSERT(head->next == first);
 	TEST_CHECK_LEN(list_len(head), 2);
 
 	fr_pair_list_free(&head);
@@ -962,8 +962,9 @@ static void test_fr_pair_cmp(void)
 	VALUE_PAIR *a, *b;
 
 	a = fr_pair_afrom_da(autofree, da_integer);
+	TEST_ASSERT(a != NULL);
 	b = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK((a != NULL) && (b != NULL))) return;
+	TEST_ASSERT(b != NULL);
 
 	a->vp_integer = 1;
 	b->vp_integer = 1;
@@ -1356,7 +1357,7 @@ static void test_fr_pair_list_afrom_file(void)
 	if (head) TEST_CHECK(head->da == da_integer1);
 
 	fr_pair_list_free(&head);
-	fclose(fp);
+	if (fp) fclose(fp);
 	unlink(path);
 }
 
@@ -1369,8 +1370,9 @@ static void test_fr_pair_validate_debug(void)
 	VALUE_PAIR const *failed[2];
 
 	filter = fr_pair_afrom_da(autofree, da_integer);
+	TEST_ASSERT(filter != NULL);
 	list   = fr_pair_afrom_da(autofree, da_integer);
-	if (!TEST_CHECK((filter != NULL) && (list != NULL))) return;
+	TEST_ASSERT(list != NULL);
 
 	filter->vp_integer = 1;
 	filter->op = T_OP_CMP_EQ;
