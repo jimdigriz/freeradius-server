@@ -47,6 +47,9 @@ static DICT_ATTR const	*da_ipaddr;	/* Tmp-IP-Address-0 1820 ipaddr   */
 static DICT_ATTR const	*da_octets;	/* Tmp-Octets-0    1830 octets    */
 static DICT_ATTR const	*da_integer64;	/* Tmp-Integer64-0 1871 integer64 */
 static DICT_ATTR const	*da_tagged;	/* Tunnel-Type       64 integer, has_tag */
+static DICT_ATTR const	*da_ipv4prefix;	/* Tmp-Cast-IPv4Prefix 1870 ipv4prefix */
+static DICT_ATTR const	*da_ipv6;	/* Tmp-Cast-IPv6Addr   1858 ipv6addr   */
+static DICT_ATTR const	*da_ipv6prefix;	/* Tmp-Cast-IPv6Prefix 1859 ipv6prefix */
 
 static char const	*test_string = "We love testing!";
 static uint8_t const	test_octets[] = { 0xde, 0xad, 0xbe, 0xef };
@@ -88,9 +91,13 @@ DIAG_ON(deprecated-declarations)
 	da_octets	= dict_attrbyname("Tmp-Octets-0");
 	da_integer64	= dict_attrbyname("Tmp-Integer64-0");
 	da_tagged	= dict_attrbyname("Tunnel-Type");
+	da_ipv4prefix	= dict_attrbyname("Tmp-Cast-IPv4Prefix");
+	da_ipv6		= dict_attrbyname("Tmp-Cast-IPv6Addr");
+	da_ipv6prefix	= dict_attrbyname("Tmp-Cast-IPv6Prefix");
 
 	if (!da_string || !da_string1 || !da_integer || !da_integer1 ||
-	    !da_ipaddr || !da_octets || !da_integer64 || !da_tagged) {
+	    !da_ipaddr || !da_octets || !da_integer64 || !da_tagged ||
+	    !da_ipv4prefix || !da_ipv6 || !da_ipv6prefix) {
 		fprintf(stderr, "pair_tests: dictionary is missing one of the test attributes\n");
 		exit(EXIT_FAILURE);
 	}
@@ -1226,6 +1233,371 @@ static void test_fr_pair_raw_from_str(void)
 	TEST_CHECK(raw.op == T_OP_EQ);
 }
 
+/*
+ *	fr_pair_afrom_ip_str()
+ *
+ *	Picks a dictionary attribute based on the shape of the string: a
+ *	colon means IPv6, a slash means a prefix.
+ *
+ *	Note the API takes non-const DICT_ATTR *, while dict_attrbyname()
+ *	returns const.  The casts below work around that; the function does
+ *	not modify the attributes, so the parameters ought to be const.
+ */
+static void test_fr_pair_afrom_ip_str(void)
+{
+	VALUE_PAIR *vp;
+
+#define IP_STR(_val) fr_pair_afrom_ip_str(autofree, _val, \
+					  da_ipaddr, da_ipv6, \
+					  da_ipv4prefix, da_ipv6prefix)
+
+	TEST_CASE("A bare IPv4 address");
+	vp = IP_STR("192.0.2.1");
+	TEST_CHECK(vp != NULL);
+	if (vp) {
+		TEST_CHECK(vp->da == da_ipaddr);
+		TEST_CHECK(vp->vp_ipaddr == htonl(0xc0000201));
+		talloc_free(vp);
+	}
+
+	TEST_CASE("A slash selects the IPv4 prefix attribute");
+	vp = IP_STR("10.0.0.0/8");
+	TEST_CHECK(vp != NULL);
+	if (vp) {
+		TEST_CHECK(vp->da == da_ipv4prefix);
+		talloc_free(vp);
+	}
+
+	TEST_CASE("A colon selects IPv6");
+	vp = IP_STR("2001:db8::1");
+	TEST_CHECK(vp != NULL);
+	if (vp) {
+		TEST_CHECK(vp->da == da_ipv6);
+		talloc_free(vp);
+	}
+
+	TEST_CASE("A colon and a slash select the IPv6 prefix");
+	vp = IP_STR("2001:db8::/32");
+	TEST_CHECK(vp != NULL);
+	if (vp) {
+		TEST_CHECK(vp->da == da_ipv6prefix);
+		talloc_free(vp);
+	}
+
+	TEST_CASE("A string which is not an address at all");
+	TEST_CHECK(IP_STR("not-an-address") == NULL);
+#undef IP_STR
+}
+
+/** Only offering some of the attributes still works for those shapes
+ *
+ * Passing none of them trips an assertion, so that case is deliberately not
+ * exercised here.
+ */
+static void test_fr_pair_afrom_ip_str_partial(void)
+{
+	VALUE_PAIR *vp;
+
+	TEST_CASE("An IPv4 address with only the IPv4 attribute given");
+	vp = fr_pair_afrom_ip_str(autofree, "192.0.2.1", da_ipaddr, NULL, NULL, NULL);
+	TEST_CHECK(vp != NULL);
+	if (vp) {
+		TEST_CHECK(vp->da == da_ipaddr);
+		talloc_free(vp);
+	}
+
+	TEST_CASE("An IPv6 address when no IPv6 attribute was given");
+	TEST_CHECK(fr_pair_afrom_ip_str(autofree, "2001:db8::1",
+					da_ipaddr, NULL, NULL, NULL) == NULL);
+}
+
+/*
+ *	fr_pair_list_afrom_file()
+ */
+static void test_fr_pair_list_afrom_file(void)
+{
+	VALUE_PAIR	*head = NULL;
+	FILE		*fp;
+	bool		done = true;
+	char const	*path = "build/tests/api/pair_tests_input.txt";
+
+	fp = fopen(path, "w");
+	if (!TEST_CHECK(fp != NULL)) {
+		TEST_MSG("Could not create %s", path);
+		return;
+	}
+	fprintf(fp, "Tmp-Integer-0 = 1\n");
+	fprintf(fp, "Tmp-String-0 = \"first\"\n");
+	fprintf(fp, "\n");
+	fprintf(fp, "Tmp-Integer-1 = 2\n");
+	fclose(fp);
+
+	fp = fopen(path, "r");
+	if (!TEST_CHECK(fp != NULL)) return;
+
+	TEST_CASE("A blank line ends the entry, and the file is not yet finished");
+	TEST_CHECK_RET(fr_pair_list_afrom_file(autofree, &head, fp, &done), 0);
+	TEST_CHECK(done == false);
+	TEST_CHECK_LEN(list_len(head), 2);
+
+	if (head) {
+		TEST_CHECK(fr_pair_find_by_da(head, da_integer, TAG_ANY) != NULL);
+		if (fr_pair_find_by_da(head, da_string, TAG_ANY)) {
+			TEST_CHECK_STRCMP(fr_pair_find_by_da(head, da_string, TAG_ANY)->vp_strvalue,
+					  "first");
+		}
+	}
+	fr_pair_list_free(&head);
+
+	TEST_CASE("Reading again picks up the next entry, and reaches EOF");
+	TEST_CHECK_RET(fr_pair_list_afrom_file(autofree, &head, fp, &done), 0);
+	TEST_CHECK(done == true);
+	TEST_CHECK_LEN(list_len(head), 1);
+	if (head) TEST_CHECK(head->da == da_integer1);
+
+	fr_pair_list_free(&head);
+	fclose(fp);
+	unlink(path);
+}
+
+/*
+ *	fr_pair_validate_debug()
+ */
+static void test_fr_pair_validate_debug(void)
+{
+	VALUE_PAIR	*filter, *list;
+	VALUE_PAIR const *failed[2];
+
+	filter = fr_pair_afrom_da(autofree, da_integer);
+	list   = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK((filter != NULL) && (list != NULL))) return;
+
+	filter->vp_integer = 1;
+	filter->op = T_OP_CMP_EQ;
+	list->vp_integer = 2;
+
+	TEST_CASE("A value mismatch names both sides");
+	failed[0] = filter;
+	failed[1] = list;
+	fr_pair_validate_debug(autofree, failed);
+	TEST_CHECK_STRCMP(fr_strerror(), "Attribute value \"2\" didn't match filter: Tmp-Integer-0 == 1");
+
+	TEST_CASE("An attribute missing from the list");
+	failed[0] = filter;
+	failed[1] = NULL;
+	fr_pair_validate_debug(autofree, failed);
+	TEST_CHECK_STRCMP(fr_strerror(), "Attribute \"Tmp-Integer-0\" not found in list");
+
+	TEST_CASE("An attribute missing from the filter");
+	failed[0] = NULL;
+	failed[1] = list;
+	fr_pair_validate_debug(autofree, failed);
+	TEST_CHECK_STRCMP(fr_strerror(), "Attribute \"Tmp-Integer-0\" not found in filter");
+
+	talloc_free(filter);
+	talloc_free(list);
+}
+
+/** fr_pair_validate() fills in the failed[] array
+ */
+static void test_fr_pair_validate_failed_pairs(void)
+{
+	VALUE_PAIR	*filter = NULL, *list = NULL;
+	VALUE_PAIR	*vp;
+	VALUE_PAIR const *failed[2] = { NULL, NULL };
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+	vp->vp_integer = 1;
+	vp->op = T_OP_CMP_EQ;
+	fr_pair_add(&filter, vp);
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+	vp->vp_integer = 999;
+	fr_pair_add(&list, vp);
+
+	TEST_CHECK(fr_pair_validate(failed, filter, list) == false);
+
+	TEST_CASE("Both offending pairs are reported");
+	TEST_CHECK(failed[0] != NULL);
+	TEST_CHECK(failed[1] != NULL);
+	if (failed[0]) TEST_CHECK(failed[0]->da == da_integer);
+	if (failed[1]) TEST_CHECK(failed[1]->vp_integer == 999);
+
+	fr_pair_list_free(&filter);
+	fr_pair_list_free(&list);
+}
+
+/*
+ *	fr_pair_cmp_op()
+ */
+static void test_fr_pair_cmp_op(void)
+{
+	VALUE_PAIR *a, *b;
+
+	a = fr_pair_afrom_da(autofree, da_integer);
+	b = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK((a != NULL) && (b != NULL))) return;
+
+	a->vp_integer = 1;
+	b->vp_integer = 2;
+
+	/*
+	 *	Note the argument order.  fr_pair_cmp_op(op, a, b) evaluates
+	 *	"a op b", which is the opposite way round from fr_pair_cmp(),
+	 *	where the operator comes from "a" and the comparison is
+	 *	"b op a".
+	 */
+	TEST_CASE("a < b");
+	TEST_CHECK_RET(fr_pair_cmp_op(T_OP_LT, a, b), 1);
+	TEST_CHECK_RET(fr_pair_cmp_op(T_OP_GT, a, b), 0);
+
+	TEST_CASE("and the reverse");
+	TEST_CHECK_RET(fr_pair_cmp_op(T_OP_GT, b, a), 1);
+
+	TEST_CASE("equality");
+	TEST_CHECK_RET(fr_pair_cmp_op(T_OP_CMP_EQ, a, b), 0);
+	b->vp_integer = 1;
+	TEST_CHECK_RET(fr_pair_cmp_op(T_OP_CMP_EQ, a, b), 1);
+
+	talloc_free(a);
+	talloc_free(b);
+}
+
+/*
+ *	Gaps in the existing coverage.
+ */
+static void test_fr_pair_to_unknown_idempotent(void)
+{
+	VALUE_PAIR *vp;
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+
+	TEST_CHECK_RET(fr_pair_to_unknown(vp), 0);
+	TEST_CHECK(vp->da->flags.is_unknown);
+
+	TEST_CASE("Converting an already-unknown pair is a no-op, not an error");
+	TEST_CHECK_RET(fr_pair_to_unknown(vp), 0);
+	TEST_CHECK(vp->da->flags.is_unknown);
+
+	talloc_free(vp);
+}
+
+static void test_fr_pair_list_move_replace(void)
+{
+	VALUE_PAIR	*to = NULL, *from = NULL;
+	VALUE_PAIR	*vp;
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+	vp->vp_integer = 1;
+	fr_pair_add(&to, vp);
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+	vp->vp_integer = 2;
+	vp->op = T_OP_SET;
+	fr_pair_add(&from, vp);
+
+	TEST_CASE("T_OP_SET replaces rather than appends");
+	fr_pair_list_move(autofree, &to, &from, T_OP_SET);
+
+	TEST_CHECK_LEN(list_len(to), 1);
+	if (to) TEST_CHECK(to->vp_integer == 2);
+
+	fr_pair_list_free(&from);
+	fr_pair_list_free(&to);
+}
+
+static void test_delete_by_da_repeated(void)
+{
+	VALUE_PAIR	*head = NULL;
+	VALUE_PAIR	*vp;
+	int		i;
+
+	for (i = 0; i < 3; i++) {
+		vp = fr_pair_afrom_da(autofree, da_string1);
+		if (!TEST_CHECK(vp != NULL)) return;
+		fr_pair_add(&head, vp);
+	}
+
+	vp = fr_pair_afrom_da(autofree, da_integer1);
+	if (!TEST_CHECK(vp != NULL)) return;
+	fr_pair_add(&head, vp);
+
+	fr_pair_delete_by_da(&head, da_string1);
+
+	TEST_CHECK_LEN(list_len(head), 1);
+	TEST_CHECK(head->da == da_integer1);
+
+	fr_pair_list_free(&head);
+}
+
+static void test_cursor_on_empty_list(void)
+{
+	VALUE_PAIR	*head = NULL;
+	vp_cursor_t	cursor;
+
+	TEST_CASE("A cursor over an empty list yields nothing");
+	TEST_CHECK(fr_cursor_init(&cursor, &head) == NULL);
+	TEST_CHECK(fr_cursor_current(&cursor) == NULL);
+	TEST_CHECK(fr_cursor_next(&cursor) == NULL);
+	TEST_CHECK(fr_cursor_first(&cursor) == NULL);
+	TEST_CHECK(fr_cursor_last(&cursor) == NULL);
+	TEST_CHECK(fr_cursor_next_peek(&cursor) == NULL);
+}
+
+static void test_cursor_insert_into_empty(void)
+{
+	VALUE_PAIR	*head = NULL;
+	vp_cursor_t	cursor;
+	VALUE_PAIR	*vp;
+
+	fr_cursor_init(&cursor, &head);
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+
+	TEST_CASE("Inserting into an empty list sets the head");
+	fr_cursor_insert(&cursor, vp);
+	TEST_CHECK(head == vp);
+	TEST_CHECK_LEN(list_len(head), 1);
+
+	fr_pair_list_free(&head);
+}
+
+static void test_fr_pair_value_from_str_bad(void)
+{
+	VALUE_PAIR *vp;
+
+	vp = fr_pair_afrom_da(autofree, da_integer);
+	if (!TEST_CHECK(vp != NULL)) return;
+
+	TEST_CASE("A value which does not parse is an error");
+	TEST_CHECK(fr_pair_value_from_str(vp, "not-a-number", -1) < 0);
+
+	talloc_free(vp);
+}
+
+static void test_fr_pair_make_tagged(void)
+{
+	VALUE_PAIR	*head = NULL;
+	VALUE_PAIR	*vp;
+
+	TEST_CASE("A tag in the attribute name is parsed out");
+	vp = fr_pair_make(autofree, &head, "Tunnel-Type:2", "VLAN", T_OP_EQ);
+	TEST_CHECK(vp != NULL);
+	if (!vp) return;
+
+	TEST_CHECK(vp->da == da_tagged);
+	TEST_CHECK(vp->tag == 2);
+	TEST_MSG("Expected tag 2, got %i", vp->tag);
+
+	fr_pair_list_free(&head);
+}
+
 TEST_LIST = {
 	/*
 	 *	Allocation
@@ -1315,6 +1687,39 @@ TEST_LIST = {
 	{ "fr_pair_make",			test_fr_pair_make },
 	{ "fr_pair_list_afrom_str",		test_fr_pair_list_afrom_str },
 	{ "fr_pair_raw_from_str",		test_fr_pair_raw_from_str },
+
+	/*
+	 *	Address parsing
+	 */
+	{ "fr_pair_afrom_ip_str",		test_fr_pair_afrom_ip_str },
+	{ "fr_pair_afrom_ip_str_partial",	test_fr_pair_afrom_ip_str_partial },
+
+	/*
+	 *	Reading from a file
+	 */
+	{ "fr_pair_list_afrom_file",		test_fr_pair_list_afrom_file },
+
+	/*
+	 *	Validation reporting
+	 */
+	{ "fr_pair_validate_debug",		test_fr_pair_validate_debug },
+	{ "fr_pair_validate_failed_pairs",	test_fr_pair_validate_failed_pairs },
+
+	/*
+	 *	Comparison macro
+	 */
+	{ "fr_pair_cmp_op",			test_fr_pair_cmp_op },
+
+	/*
+	 *	Edge cases
+	 */
+	{ "fr_pair_to_unknown_idempotent",	test_fr_pair_to_unknown_idempotent },
+	{ "fr_pair_list_move_replace",		test_fr_pair_list_move_replace },
+	{ "delete_by_da_repeated",		test_delete_by_da_repeated },
+	{ "cursor_on_empty_list",		test_cursor_on_empty_list },
+	{ "cursor_insert_into_empty",		test_cursor_insert_into_empty },
+	{ "fr_pair_value_from_str_bad",		test_fr_pair_value_from_str_bad },
+	{ "fr_pair_make_tagged",		test_fr_pair_make_tagged },
 
 	TEST_TERMINATOR
 };

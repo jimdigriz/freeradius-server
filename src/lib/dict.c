@@ -131,7 +131,11 @@ const size_t dict_attr_sizes[PW_TYPE_MAX][2] = {
 	[PW_TYPE_EVS]		= {6, ~0},
 	[PW_TYPE_INTEGER64]	= {8, 8},
 	[PW_TYPE_IPV4_PREFIX]	= {6, 6},
-	[PW_TYPE_VSA]		= {4, ~0}
+	[PW_TYPE_VSA]		= {4, ~0},
+	[PW_TYPE_BOOLEAN]	= {1, 1},
+
+	/* PW_TYPE_TIMEVAL is not encoded on the wire */
+	/* PW_TYPE_COMBO_IP_PREFIX is defined for completeness, but isn't used in v3 */
 };
 
 /*

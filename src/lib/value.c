@@ -676,6 +676,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 
 		if (fr_pton4(&addr, src, src_len, fr_hostname_lookups, false) < 0) return -1;
 
+		dst->ipv4prefix[0] = 0;
 		dst->ipv4prefix[1] = addr.prefix;
 		memcpy(&dst->ipv4prefix[2], &addr.ipaddr.ip4addr.s_addr, sizeof(dst->ipv4prefix) - 2);
 	}
@@ -707,6 +708,7 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 
 		if (fr_pton6(&addr, src, src_len, fr_hostname_lookups, false) < 0) return -1;
 
+		dst->ipv6prefix[0] = 0;
 		dst->ipv6prefix[1] = addr.prefix;
 		memcpy(&dst->ipv6prefix[2], addr.ipaddr.ip6addr.s6_addr, sizeof(dst->ipv6prefix) - 2);
 	}
@@ -732,6 +734,20 @@ ssize_t value_data_from_str(TALLOC_CTX *ctx, value_data_t *dst,
 	}
 
 	switch (*src_type) {
+	case PW_TYPE_BOOLEAN:
+		if ((strcmp(src, "yes") == 0) || (strcmp(src, "true") == 0) || (strcmp(src, "1") == 0)) {
+			dst->boolean = true;
+			break;
+		}
+
+		if ((strcmp(src, "no") == 0) || (strcmp(src, "false") == 0) || (strcmp(src, "0") == 0)) {
+			dst->boolean = false;
+			break;
+		}
+
+		fr_strerror_printf("Invalid value \"%s\" for boolean", src);
+		return -1;
+
 	case PW_TYPE_BYTE:
 	{
 		char *p;
@@ -1560,7 +1576,13 @@ ssize_t value_data_cast(TALLOC_CTX *ctx, value_data_t *dst,
 		dst->integer = htonl(src->ipaddr.s_addr);
 
 	} else {		/* they're of the same byte order */
-		memcpy(&dst, &src, src_len);
+		/*
+		 *	Note that dst and src are already pointers.  Taking
+		 *	their addresses here copied between the local pointer
+		 *	variables instead of between the values, so the
+		 *	destination was never written.
+		 */
+		memcpy(dst, src, src_len);
 	}
 
 	return src_len;
@@ -2020,6 +2042,9 @@ print_int:
 				data->ether[2], data->ether[3],
 				data->ether[4], data->ether[5]);
 
+	case PW_TYPE_BOOLEAN:
+		return snprintf(out, outlen, "%s", data->boolean ? "yes" : "no");
+
 	/*
 	 *	Don't add default here
 	 */
@@ -2031,7 +2056,6 @@ print_int:
 	case PW_TYPE_EVS:
 	case PW_TYPE_VSA:
 	case PW_TYPE_TIMEVAL:
-	case PW_TYPE_BOOLEAN:
 	case PW_TYPE_MAX:
 		fr_assert(0);
 		*out = '\0';
