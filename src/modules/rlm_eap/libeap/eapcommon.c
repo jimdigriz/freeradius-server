@@ -245,7 +245,7 @@ int eap_basic_compose(RADIUS_PACKET *packet, eap_packet_t *reply)
 		break;
 	default:
 		/* Should never enter here */
-		ERROR("rlm_eap: reply code %d is unknown, Rejecting the request.", reply->code);
+		ERROR("rlm_eap: reply code %d is unknown, Rejecting the request", reply->code);
 		packet->code = PW_CODE_ACCESS_REJECT;
 		break;
 	}
@@ -487,7 +487,7 @@ eap_packet_raw_t *eap_vp2packet(TALLOC_CTX *ctx, VALUE_PAIR *vps)
 
 			check_outer_tlv:
 				if (!allow_o) {
-					fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but EAP method does not use it.");
+					fr_strerror_printf("Malformed EAP packet - TLS 'O' bit is set, but EAP method does not use it");
 					talloc_free(eap_packet);
 					return NULL;
 				}

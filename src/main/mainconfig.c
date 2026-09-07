@@ -673,7 +673,7 @@ static int switch_users(CONF_SECTION *cs)
 	if (rad_debug_lvl && (getuid() != 0)) return 1;
 
 	if (cf_section_parse(cs, NULL, bootstrap_config) < 0) {
-		fr_strerror_printf("Failed to parse user/group information.");
+		fr_strerror_printf("Failed to parse user/group information");
 		return 0;
 	}
 

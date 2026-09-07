@@ -562,7 +562,7 @@ int dict_addvendor(char const *name, unsigned int value)
 	}
 
 	if ((dv = fr_pool_alloc(sizeof(*dv) + length)) == NULL) {
-		fr_strerror_printf("dict_addvendor: out of memory");
+		fr_strerror_printf("dict_addvendor: Out of memory");
 		return -1;
 	}
 
@@ -1012,17 +1012,17 @@ int dict_addattr(char const *name, int attr, unsigned int vendor, PW_TYPE type,
 		static DICT_VENDOR *last_vendor = NULL;
 
 		if (flags.has_tlv && (flags.encrypt != FLAG_ENCRYPT_NONE)) {
-			fr_strerror_printf("TLV's cannot be encrypted");
+			fr_strerror_printf("TLVs cannot be encrypted");
 			return -1;
 		}
 
 		if (flags.is_tlv && flags.has_tag) {
-			fr_strerror_printf("Sub-TLV's cannot have a tag");
+			fr_strerror_printf("Sub-TLVs cannot have a tag");
 			return -1;
 		}
 
 		if (flags.has_tlv && flags.has_tag) {
-			fr_strerror_printf("TLV's cannot have a tag");
+			fr_strerror_printf("TLVs cannot have a tag");
 			return -1;
 		}
 
@@ -1082,7 +1082,7 @@ int dict_addattr(char const *name, int attr, unsigned int vendor, PW_TYPE type,
 	 */
 	if ((n = fr_pool_alloc(sizeof(*n) + namelen)) == NULL) {
 	oom:
-		fr_strerror_printf("dict_addattr: out of memory");
+		fr_strerror_printf("dict_addattr: Out of memory");
 		return -1;
 	}
 
@@ -1213,7 +1213,7 @@ int dict_addvalue(char const *namestr, char const *attrstr, int value)
 	}
 
 	if ((dval = fr_pool_alloc(sizeof(*dval) + length)) == NULL) {
-		fr_strerror_printf("dict_addvalue: out of memory");
+		fr_strerror_printf("dict_addvalue: Out of memory");
 		return -1;
 	}
 	memset(dval, 0, sizeof(*dval));
@@ -1298,7 +1298,7 @@ int dict_addvalue(char const *namestr, char const *attrstr, int value)
 		fixup = (value_fixup_t *) malloc(sizeof(*fixup));
 		if (!fixup) {
 			fr_pool_free(dval);
-			fr_strerror_printf("dict_addvalue: out of memory");
+			fr_strerror_printf("dict_addvalue: Out of memory");
 			return -1;
 		}
 		memset(fixup, 0, sizeof(*fixup));
@@ -1684,7 +1684,7 @@ static int process_attribute(char const* fn, int const line,
 			 */
 			da = dict_parent(value, vendor);
 			if (!da) {
-				fr_strerror_printf("dict_init: %s[%d]: Parent attribute for %08x,%08x is undefined.", fn, line, value, vendor);
+				fr_strerror_printf("dict_init: %s[%d]: Parent attribute for %08x,%08x is undefined", fn, line, value, vendor);
 				return -1;
 			}
 
@@ -1880,7 +1880,7 @@ static int process_attribute(char const* fn, int const line,
 			break;
 
 		default:
-			fr_strerror_printf("dict_init: %s[%d]: Attributes of type %s cannot be tagged.",
+			fr_strerror_printf("dict_init: %s[%d]: Attributes of type %s cannot be tagged",
 				   fn, line,
 				   fr_int2str(dict_attr_types, type, "?Unknown?"));
 			return -1;
@@ -1897,7 +1897,7 @@ static int process_attribute(char const* fn, int const line,
 
 			dv = dict_vendorbyvalue(vendor);
 			if (!dv || (dv->type != 1) || (dv->length != 1)) {
-				fr_strerror_printf("dict_init: %s[%d]: Type \"tlv\" can only be for \"format=1,1\".",
+				fr_strerror_printf("dict_init: %s[%d]: Type \"tlv\" can only be for \"format=1,1\"",
 						   fn, line);
 				return -1;
 			}
@@ -2046,7 +2046,7 @@ static int process_value_alias(char const* fn, int const line, char **argv,
 	}
 
 	if ((dval = fr_pool_alloc(sizeof(*dval))) == NULL) {
-		fr_strerror_printf("dict_addvalue: out of memory");
+		fr_strerror_printf("dict_addvalue: Out of memory");
 		return -1;
 	}
 
@@ -2374,7 +2374,7 @@ static int my_dict_init(char const *parent, char const *filename,
 #ifdef S_IWOTH
 	if ((statbuf.st_mode & S_IWOTH) != 0) {
 		fclose(fp);
-		fr_strerror_printf("dict_init: Dictionary \"%s\" is globally writable.  Refusing to start due to insecure configuration.",
+		fr_strerror_printf("dict_init: Dictionary \"%s\" is globally writable.  Refusing to start due to insecure configuration",
 			   fn);
 		return -1;
 	}

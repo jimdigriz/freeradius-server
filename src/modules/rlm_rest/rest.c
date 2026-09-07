@@ -1270,7 +1270,7 @@ static VALUE_PAIR *json_pair_make_leaf(UNUSED rlm_rest_t *instance, UNUSED rlm_r
 	VALUE_PAIR *vp;
 
 	if (json_object_is_type(leaf, json_type_null)) {
-		RDEBUG3("Got null value for attribute \"%s\", skipping...", da->name);
+		RDEBUG3("Got null value for attribute \"%s\", skipping it", da->name);
 
 		return NULL;
 	}
@@ -1282,7 +1282,7 @@ static VALUE_PAIR *json_pair_make_leaf(UNUSED rlm_rest_t *instance, UNUSED rlm_r
 	 */
 	value = json_object_get_string(leaf);
 	if (!value) {
-		RWDEBUG("Failed getting string value for attribute \"%s\", skipping...", da->name);
+		RWDEBUG("Failed getting string value for attribute \"%s\", skipping it", da->name);
 
 		return NULL;
 	}
@@ -1305,7 +1305,7 @@ static VALUE_PAIR *json_pair_make_leaf(UNUSED rlm_rest_t *instance, UNUSED rlm_r
 
 	vp = fr_pair_afrom_da(ctx, da);
 	if (!vp) {
-		RWDEBUG("Failed creating valuepair for attribute \"%s\", skipping...", da->name);
+		RWDEBUG("Failed creating valuepair for attribute \"%s\", skipping it", da->name);
 		talloc_free(expanded);
 
 		return NULL;
@@ -1317,7 +1317,7 @@ static VALUE_PAIR *json_pair_make_leaf(UNUSED rlm_rest_t *instance, UNUSED rlm_r
 	ret = fr_pair_value_from_str(vp, to_parse, -1);
 	talloc_free(expanded);
 	if (ret < 0) {
-		RWDEBUG("Incompatible value assignment for attribute \"%s\", skipping...", da->name);
+		RWDEBUG("Incompatible value assignment for attribute \"%s\", skipping it", da->name);
 		talloc_free(vp);
 
 		return NULL;
@@ -1389,11 +1389,11 @@ static int json_pair_make(rlm_rest_t *instance, rlm_rest_section_t *section,
 	if (!json_object_is_type(object, json_type_object)) {
 #ifdef HAVE_JSON_TYPE_TO_NAME
 		REDEBUG("Can't process VP container, expected JSON object"
-			"got \"%s\", skipping...",
+			"got \"%s\", skipping it",
 			json_type_to_name(json_object_get_type(object)));
 #else
 		REDEBUG("Can't process VP container, expected JSON object"
-			", skipping...");
+			", skipping it");
 #endif
 		return -1;
 	}
@@ -1431,18 +1431,18 @@ static int json_pair_make(rlm_rest_t *instance, rlm_rest_section_t *section,
 		RDEBUG2("Parsing attribute \"%s\"", name);
 
 		if (tmpl_from_attr_str(&dst, name, REQUEST_CURRENT, PAIR_LIST_REPLY, false, false) <= 0) {
-			RWDEBUG("Failed parsing attribute: %s, skipping...", fr_strerror());
+			RWDEBUG("Failed parsing attribute: %s, skipping it", fr_strerror());
 			continue;
 		}
 
 		if (radius_request(&current, dst.tmpl_request) < 0) {
-			RWDEBUG("Attribute name refers to outer request but not in a tunnel, skipping...");
+			RWDEBUG("Attribute name refers to outer request but not in a tunnel, skipping it");
 			continue;
 		}
 
 		vps = radius_list(current, dst.tmpl_list);
 		if (!vps) {
-			RWDEBUG("List not valid in this context, skipping...");
+			RWDEBUG("List not valid in this context, skipping it");
 			continue;
 		}
 		ctx = radius_list_ctx(current, dst.tmpl_list);
@@ -1470,7 +1470,7 @@ static int json_pair_make(rlm_rest_t *instance, rlm_rest_section_t *section,
 			if (json_object_object_get_ex(value, "op", &tmp)) {
 				flags.op = fr_str2int(fr_tokens, json_object_get_string(tmp), 0);
 				if (!flags.op) {
-					RWDEBUG("Invalid operator value \"%s\", skipping...",
+					RWDEBUG("Invalid operator value \"%s\", skipping it",
 						json_object_get_string(tmp));
 					continue;
 				}
@@ -1494,7 +1494,7 @@ static int json_pair_make(rlm_rest_t *instance, rlm_rest_section_t *section,
 			 *  Value key must be present if were using the expanded syntax.
 			 */
 			if (!json_object_object_get_ex(value, "value", &value)) {
-				RWDEBUG("Value key missing, skipping...");
+				RWDEBUG("Value key missing, skipping it");
 				continue;
 			}
 		}
@@ -1505,7 +1505,7 @@ static int json_pair_make(rlm_rest_t *instance, rlm_rest_section_t *section,
 		if (!flags.is_json && json_object_is_type(value, json_type_array)) {
 			elements = json_object_array_length(value);
 			if (!elements) {
-				RWDEBUG("Zero length value array, skipping...");
+				RWDEBUG("Zero length value array, skipping it");
 				continue;
 			}
 			element = json_object_array_get_idx(value, 0);
@@ -1535,7 +1535,7 @@ static int json_pair_make(rlm_rest_t *instance, rlm_rest_section_t *section,
 
 			if (json_object_is_type(element, json_type_object) && !flags.is_json) {
 				/* TODO: Insert nested VP into VP structure...*/
-				RWDEBUG("Found nested VP, these are not yet supported, skipping...");
+				RWDEBUG("Found nested VP, these are not yet supported, skipping it");
 
 				continue;
 
@@ -2145,7 +2145,7 @@ int rest_request_config(rlm_rest_t *instance, rlm_rest_section_t *section,
 	while (fr_cursor_next_by_num(&headers, PW_REST_HTTP_HEADER, 0, TAG_ANY)) {
 		header = fr_cursor_remove(&headers);
 		if (!strchr(header->vp_strvalue, ':')) {
-			RWDEBUG("Invalid HTTP header \"%s\" must be in format '<attribute>: <value>'.  Skipping...",
+			RWDEBUG("Invalid HTTP header \"%s\" must be in format '<attribute>: <value>'.  skipping it",
 				header->vp_strvalue);
 			talloc_free(header);
 			continue;

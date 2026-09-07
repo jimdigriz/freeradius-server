@@ -1002,7 +1002,7 @@ static ssize_t vp2data_any(RADIUS_PACKET *packet,
 		case PW_CODE_PROTOCOL_ERROR:
 		default:
 			if (!original) {
-				fr_strerror_printf("ERROR: No request packet, cannot encrypt %s attribute in the vp.", vp->da->name);
+				fr_strerror_printf("ERROR: No request packet, cannot encrypt %s attribute", vp->da->name);
 				return -1;
 			}
 
@@ -2867,7 +2867,7 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 	 */
 	if ((fr_max_attributes > 0) &&
 	    (num_attributes > fr_max_attributes)) {
-		FR_DEBUG_STRERROR_PRINTF("Possible DoS attack from host %s: Too many attributes in request (received %d, max %d are allowed).",
+		FR_DEBUG_STRERROR_PRINTF("Possible DoS attack from host %s: Too many attributes in request (received %d, max %d are allowed)",
 			   inet_ntop(packet->src_ipaddr.af,
 				     &packet->src_ipaddr.ipaddr,
 				     host_ipaddr, sizeof(host_ipaddr)),
@@ -2895,7 +2895,7 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 	    !packet->radiusv11 &&
 #endif
 	    !seen_ma) {
-		FR_DEBUG_STRERROR_PRINTF("Insecure packet from host %s:  Packet does not contain required Message-Authenticator attribute.  You may need to set \"require_message_authenticator = no\" in the configuration.",
+		FR_DEBUG_STRERROR_PRINTF("Insecure packet from host %s:  Packet does not contain required Message-Authenticator attribute.  You may need to set \"require_message_authenticator = no\" in the configuration",
 			   inet_ntop(packet->src_ipaddr.af,
 				     &packet->src_ipaddr.ipaddr,
 				     host_ipaddr, sizeof(host_ipaddr)));
@@ -2965,7 +2965,7 @@ RADIUS_PACKET *rad_recv(TALLOC_CTX *ctx, int fd, int flags)
 	 */
 	packet = rad_alloc(ctx, false);
 	if (!packet) {
-		fr_strerror_printf("out of memory");
+		fr_strerror_printf("Out of memory");
 		return NULL;
 	}
 
@@ -3153,8 +3153,8 @@ int rad_verify(RADIUS_PACKET *packet, RADIUSV11_UNUSED RADIUS_PACKET *original, 
 	 *	so can't validate the authenticators.
 	 */
 	if ((packet->code == 0) || (packet->code >= FR_MAX_PACKET_CODE)) {
-		fr_strerror_printf("Received Unknown packet code %d "
-				   "from client %s port %d: Cannot validate Request/Response Authenticator.",
+		fr_strerror_printf("Received unknown packet code %d "
+				   "from client %s port %d: Cannot validate Request/Response Authenticator",
 				   packet->code,
 				   inet_ntop(packet->src_ipaddr.af,
 				             &packet->src_ipaddr.ipaddr,
@@ -4810,7 +4810,7 @@ int rad_decode(RADIUS_PACKET *packet, RADIUS_PACKET *original,
 			char host_ipaddr[128];
 
 			fr_pair_list_free(&head);
-			fr_strerror_printf("Possible DoS attack from host %s: Too many attributes in request (received %d, max %d are allowed).",
+			fr_strerror_printf("Possible DoS attack from host %s: Too many attributes in request (received %d, max %d are allowed)",
 				   inet_ntop(packet->src_ipaddr.af,
 					     &packet->src_ipaddr.ipaddr,
 					     host_ipaddr, sizeof(host_ipaddr)),
@@ -5270,7 +5270,7 @@ RADIUS_PACKET *rad_alloc(TALLOC_CTX *ctx, bool new_vector)
 
 	rp = talloc_zero(ctx, RADIUS_PACKET);
 	if (!rp) {
-		fr_strerror_printf("out of memory");
+		fr_strerror_printf("Out of memory");
 		return NULL;
 	}
 	rp->id = -1;

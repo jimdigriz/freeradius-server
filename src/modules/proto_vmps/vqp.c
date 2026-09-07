@@ -279,7 +279,7 @@ RADIUS_PACKET *vqp_recv(int sockfd)
 	 */
 	packet = rad_alloc(NULL, false);
 	if (!packet) {
-		fr_strerror_printf("out of memory");
+		fr_strerror_printf("Out of memory");
 		return NULL;
 	}
 
