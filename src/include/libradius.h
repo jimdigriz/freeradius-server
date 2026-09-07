@@ -661,7 +661,6 @@ int		fr_pair_cmp(VALUE_PAIR *a, VALUE_PAIR *b);
 int		fr_pair_list_cmp(VALUE_PAIR *a, VALUE_PAIR *b);
 
 typedef		int8_t (*fr_cmp_t)(void const *a, void const *b);
-int8_t		attrcmp(void const *a, void const *b);
 int8_t		fr_pair_cmp_by_da_tag(void const *a, void const *b);
 void		fr_pair_list_sort(VALUE_PAIR **vps, fr_cmp_t cmp);
 void		fr_pair_validate_debug(TALLOC_CTX *ctx, VALUE_PAIR const *failed[2]);
